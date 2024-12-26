@@ -1,26 +1,31 @@
-FROM python:3.9-slim
+FROM ubuntu:20.04
 
-# Set environment variables
-ENV PYTHONDONTWRITEBYTECODE 1
-ENV PYTHONUNBUFFERED 1
+ENV DEBIAN_FRONTEND=noninteractive
+ENV PYTHONUNBUFFERED=1
+
+# Install system dependencies
+RUN apt-get update && apt-get install -y \
+    python3.9 \
+    python3.9-dev \
+    python3.9-venv \
+    python3-pip \
+    build-essential \
+    libpq-dev \
+    gdal-bin \
+    libgdal-dev \
+    python3-gdal \
+    git \
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/*
+
+# Create virtual environment
+RUN python3.9 -m venv /opt/venv
+ENV PATH="/opt/venv/bin:$PATH"
 
 # Set work directory
 WORKDIR /app
 
-# Install system dependencies and GDAL
-RUN apt-get update && apt-get install -y \
-    build-essential \
-    python3-dev \
-    python3-pip \
-    libpq-dev \
-    gdal-bin \
-    libgdal-dev \
-    && rm -rf /var/lib/apt/lists/*
-
-# Set GDAL environment variables
-ENV GDAL_VERSION=3.6.2
-
-# Install Python dependencies
+# Copy requirements first for better caching
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
@@ -34,4 +39,4 @@ RUN chmod +x manage.py
 EXPOSE 8090
 
 # Run the application
-CMD ["python", "manage.py", "runserver", "0.0.0.0:8090"] 
+CMD ["python3.9", "manage.py", "runserver", "0.0.0.0:8090"] 

@@ -5,7 +5,7 @@ from django.contrib.auth.models import User
 from django.db import models
 from django.core.validators import MaxValueValidator
 import random
-from django.contrib.postgres.fields import JSONField
+from django.db.models import JSONField
 from django.contrib.gis.geos import GEOSGeometry
 from django.contrib.gis.db import models
 

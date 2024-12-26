@@ -1,12 +1,13 @@
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, List
 import torch
 import numpy as np
-from detectron2 import model_zoo
-from detectron2.engine import DefaultPredictor
-from detectron2.config import get_cfg
-from detectron2.data import MetadataCatalog
-from detectron2.structures import BoxMode
-from detectron2.utils.visualizer import Visualizer
+import os
+from torchvision.models.detection import maskrcnn_resnet50_fpn
+from torchvision.models.detection.faster_rcnn import FastRCNNPredictor
+from torchvision.transforms import functional as F
+from shapely.geometry import Polygon
+from shapely.geometry import mapping
+from skimage import measure
 
 from deepgis_xr.apps.core.models import CategoryType
 
@@ -17,6 +18,7 @@ class BasePredictor:
         self.model_path = model_path
         self.confidence_threshold = confidence_threshold
         self.model = self._load_model()
+        self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
         
     def _load_model(self):
         """Load the ML model - to be implemented by subclasses"""
@@ -28,33 +30,40 @@ class BasePredictor:
 
 
 class MaskRCNNPredictor(BasePredictor):
-    """Mask R-CNN implementation"""
+    """Mask R-CNN implementation using torchvision"""
     
     def _load_model(self):
-        cfg = get_cfg()
-        cfg.merge_from_file(model_zoo.get_config_file("COCO-InstanceSegmentation/mask_rcnn_R_50_FPN_3x.yaml"))
-        cfg.MODEL.ROI_HEADS.NUM_CLASSES = len(CategoryType.objects.all())
+        num_classes = len(CategoryType.objects.all()) + 1  # +1 for background
+        model = maskrcnn_resnet50_fpn(pretrained=True)
         
+        # Modify the classifier to match our number of classes
+        in_features = model.roi_heads.box_predictor.cls_score.in_features
+        model.roi_heads.box_predictor = FastRCNNPredictor(in_features, num_classes)
+        
+        # Load custom weights if available
         if self.model_path and os.path.exists(self.model_path):
-            cfg.MODEL.WEIGHTS = self.model_path
-        else:
-            cfg.MODEL.WEIGHTS = model_zoo.get_checkpoint_url("COCO-InstanceSegmentation/mask_rcnn_R_50_FPN_3x.yaml")
+            model.load_state_dict(torch.load(self.model_path, map_location=self.device))
         
-        cfg.MODEL.ROI_HEADS.SCORE_THRESH_TEST = self.confidence_threshold
-        return DefaultPredictor(cfg)
+        model.to(self.device)
+        model.eval()
+        return model
     
     def predict(self, image: np.ndarray) -> Dict[str, Any]:
         """Run inference on an image"""
-        outputs = self.model(image)
+        # Convert numpy array to tensor
+        image_tensor = F.to_tensor(image).to(self.device)
         
-        # Convert outputs to CPU numpy arrays
-        instances = outputs["instances"].to("cpu")
+        with torch.no_grad():
+            predictions = self.model([image_tensor])[0]
+        
+        # Filter predictions based on confidence threshold
+        mask = predictions['scores'] >= self.confidence_threshold
+        
         return {
-            "instances": instances,
-            "pred_boxes": instances.pred_boxes.tensor.numpy(),
-            "scores": instances.scores.numpy(),
-            "pred_classes": instances.pred_classes.numpy(),
-            "pred_masks": instances.pred_masks.numpy()
+            "pred_boxes": predictions['boxes'][mask].cpu().numpy(),
+            "scores": predictions['scores'][mask].cpu().numpy(),
+            "pred_classes": predictions['labels'][mask].cpu().numpy(),
+            "pred_masks": predictions['masks'][mask].squeeze(1).cpu().numpy()
         }
     
     def predictions_to_geojson(self, 
@@ -67,7 +76,7 @@ class MaskRCNNPredictor(BasePredictor):
         for i in range(len(predictions["pred_boxes"])):
             mask = predictions["pred_masks"][i]
             score = predictions["scores"][i]
-            category_idx = predictions["pred_classes"][i]
+            category_idx = predictions["pred_classes"][i] - 1  # Subtract 1 as class 0 is background
             
             # Convert binary mask to polygon
             contours = measure.find_contours(mask, 0.5)

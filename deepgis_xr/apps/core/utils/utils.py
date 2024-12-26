@@ -1,7 +1,7 @@
 import torch
 import numpy as np
 import rasterio
-import albumentations as A
+from torchvision import transforms
 from typing import List, Union, Tuple
 
 def preprocess_image(
@@ -10,9 +10,10 @@ def preprocess_image(
 ) -> torch.Tensor:
     """Preprocess image for model input."""
     # Create transform pipeline
-    transform = A.Compose([
-        A.Resize(target_size[0], target_size[1]),
-        A.Normalize(
+    transform = transforms.Compose([
+        transforms.ToTensor(),
+        transforms.Resize(target_size),
+        transforms.Normalize(
             mean=[0.485, 0.456, 0.406],
             std=[0.229, 0.224, 0.225],
         ),
@@ -22,16 +23,18 @@ def preprocess_image(
     if isinstance(image, torch.Tensor):
         image = image.numpy()
     
-    # Ensure correct shape (C, H, W)
-    if image.shape[0] not in [1, 3]:
-        image = np.moveaxis(image, -1, 0)
+    # Ensure correct shape (H, W, C)
+    if image.shape[0] in [1, 3]:
+        image = np.moveaxis(image, 0, -1)
+    
+    # Convert to PIL Image for torchvision transforms
+    if isinstance(image, np.ndarray):
+        image = transforms.ToPILImage()(image)
     
     # Apply transforms
-    transformed = transform(image=image)
-    image = transformed['image']
+    image = transform(image)
     
-    # Convert to tensor
-    image = torch.from_numpy(image).float()
+    # Add batch dimension if needed
     if len(image.shape) == 3:
         image = image.unsqueeze(0)
     

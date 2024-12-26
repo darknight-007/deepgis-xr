@@ -6,6 +6,9 @@ from django.conf.urls.static import static
 urlpatterns = [
     path('admin/', admin.site.urls),
     
+    # Authentication URLs
+    path('auth/', include('deepgis_xr.apps.auth.urls')),
+    
     # API endpoints
     path('api/v1/', include('deepgis_xr.apps.api.v1.urls')),
     

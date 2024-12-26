@@ -1,0 +1,1 @@
+default_app_config = 'deepgis_xr.apps.auth.apps.AuthConfig' 
