@@ -12,11 +12,17 @@ services:
         python3.9 manage.py migrate sessions &&
         python3.9 manage.py migrate deepgis_auth &&
         python3.9 manage.py migrate &&
+        python3.9 manage.py collectstatic --noinput &&
         python3.9 manage.py runserver 0.0.0.0:8090
       "
     volumes:
       - .:/app
-      - static_volume:/app/static
+      - ./static:/app/static
+      - /mnt/2tbc2000mx500ssd/deepgis/deepgis_rocks/static-root/C3_mask_v3.tif:/app/static/C3_mask_v3.tif
+      - /mnt/2tbc2000mx500ssd/deepgis/deepgis_rocks/static-root/pb-rock.stl:/app/static/pb-rock.stl
+      - /mnt/2tbc2000mx500ssd/deepgis/deepgis_rocks/static-root/C3.tif:/app/static/C3.tif
+      - /mnt/2tbc2000mx500ssd/deepgis/deepgis_rocks/rocks-coord-list.csv:/app/static/rocks-coord-list.csv
+      - /mnt/2tbc2000mx500ssd/deepgis/deepgis_rocks_static_serving_nginx/static/rock-tiles:/app/static/rock-tiles
       - media_volume:/app/media
     expose:
       - 8090
@@ -85,6 +91,15 @@ services:
     depends_on:
       - redis
       - db
+
+  tileserver:
+    image: nginx:alpine
+    ports:
+      - "8091:80"
+    volumes:
+      - ./static/rock-tiles/raw:/usr/share/nginx/html/tiles
+      - ./nginx/tileserver.conf:/etc/nginx/conf.d/default.conf
+    restart: unless-stopped
 
 volumes:
   postgres_data:

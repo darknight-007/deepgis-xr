@@ -214,7 +214,7 @@ document.getElementById('map').addEventListener('click', function() {
 });
 
 // Initialize the map centered on ASU Tempe campus
-var map = L.map('map').setView([33.4242, -111.9281], 15);
+var map = L.map('map');
 
 // Add satellite layer from ESRI
 L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
@@ -227,13 +227,116 @@ var osmLayer = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
     attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
 });
 
+// Add rock tiles layer
+var rockTilesLayer = L.tileLayer('http://localhost:8091/tiles/{z}/{x}/{y}.png', {
+    maxZoom: 23,
+    minZoom: 15,
+    attribution: 'Rock Tiles'
+});
+
+// Add tileserver layers
+var bfVectorLayer = L.vectorGrid.protobuf('/tiles/data/BF_vector/{z}/{x}/{y}.pbf', {
+    vectorTileLayerStyles: {
+        'BF_12-20-2020_vector': {
+            weight: 1,
+            color: '#f06eaa',
+            opacity: 0.8,
+            fill: true,
+            fillColor: '#f06eaa',
+            fillOpacity: 0.4
+        }
+    },
+    maxZoom: 22,
+    attribution: 'BF Vector Data'
+});
+
+var c3RasterLayer = L.tileLayer('/tiles/data/C3_raster/{z}/{x}/{y}.png', {
+    maxZoom: 22,
+    attribution: 'C3 Raster'
+});
+
+var c3ColorLayer = L.tileLayer('/tiles/data/C3color/{z}/{x}/{y}.png', {
+    maxZoom: 22,
+    attribution: 'C3 Color'
+});
+
+var c329Layer = L.tileLayer('/tiles/data/C3_29/{z}/{x}/{y}.png', {
+    maxZoom: 22,
+    attribution: 'C3-29'
+});
+
+var landsatLayer = L.tileLayer('/tiles/data/landsat_combined/{z}/{x}/{y}.png', {
+    maxZoom: 22,
+    attribution: 'Landsat Combined'
+});
+
+var bf0802Layer = L.tileLayer('/tiles/data/BF_raster_0802/{z}/{x}/{y}.png', {
+    maxZoom: 22,
+    attribution: 'BF 08-02-2020'
+});
+
+var bf1003Layer = L.tileLayer('/tiles/data/BF_raster_1003/{z}/{x}/{y}.png', {
+    maxZoom: 22,
+    attribution: 'BF 10-03-2020'
+});
+
 // Add layer control
 var baseMaps = {
     "Satellite": L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}'),
     "OpenStreetMap": osmLayer
 };
 
-L.control.layers(baseMaps).addTo(map);
+var overlayMaps = {
+    "Rock Tiles": rockTilesLayer,
+    "BF Vector": bfVectorLayer,
+    "C3 Raster": c3RasterLayer,
+    "C3 Color": c3ColorLayer,
+    "C3-29": c329Layer,
+    "Landsat Combined": landsatLayer,
+    "BF 08-02-2020": bf0802Layer,
+    "BF 10-03-2020": bf1003Layer
+};
+
+L.control.layers(baseMaps, overlayMaps).addTo(map);
+
+// Function to fetch metadata from tileserver
+function fetchTileserverMetadata() {
+    fetch('/tiles/data/BF_vector.json')
+        .then(response => response.json())
+        .then(data => {
+            if (data.bounds) {
+                // Set map view to the bounds of the BF vector layer
+                map.fitBounds([
+                    [data.bounds[1], data.bounds[0]], // Southwest corner
+                    [data.bounds[3], data.bounds[2]]  // Northeast corner
+                ]);
+            } else {
+                // Fallback to C3 raster if BF vector metadata is not available
+                fetch('/tiles/data/C3_raster.json')
+                    .then(response => response.json())
+                    .then(data => {
+                        if (data.bounds) {
+                            map.fitBounds([
+                                [data.bounds[1], data.bounds[0]],
+                                [data.bounds[3], data.bounds[2]]
+                            ]);
+                        } else {
+                            // Default view if no metadata is available
+                            map.setView([33.4242, -111.9281], 15);
+                        }
+                    })
+                    .catch(() => map.setView([33.4242, -111.9281], 15));
+            }
+        })
+        .catch(() => map.setView([33.4242, -111.9281], 15));
+}
+
+// Call the function when the page loads
+fetchTileserverMetadata();
+
+// Add BF vector layer and rock tiles to map by default
+bfVectorLayer.addTo(map);
+rockTilesLayer.addTo(map);
 
 // Initialize drawing controls
 var drawnItems = new L.FeatureGroup();
