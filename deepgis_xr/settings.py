@@ -10,7 +10,8 @@ DEBUG = bool(int(os.environ.get('DEBUG', 1)))
 ALLOWED_HOSTS = os.environ.get('ALLOWED_HOSTS', '*').split(',')
 
 # Application definition
-DJANGO_APPS = [
+INSTALLED_APPS = [
+    # Django apps
     'django.contrib.admin',
     'django.contrib.auth',
     'django.contrib.contenttypes',
@@ -18,21 +19,19 @@ DJANGO_APPS = [
     'django.contrib.messages',
     'django.contrib.staticfiles',
     'django.contrib.gis',
-]
-
-THIRD_PARTY_APPS = [
+    
+    # Third party apps
     'rest_framework',
     'corsheaders',
-]
-
-PROJECT_APPS = [
+    'phonenumber_field',
+    
+    # Local apps - auth must come first
+    'deepgis_xr.apps.auth.apps.AuthConfig',
     'deepgis_xr.apps.core',
     'deepgis_xr.apps.api',
     'deepgis_xr.apps.ml',
     'deepgis_xr.apps.web',
 ]
-
-INSTALLED_APPS = DJANGO_APPS + THIRD_PARTY_APPS + PROJECT_APPS
 
 # Middleware
 MIDDLEWARE = [
@@ -135,14 +134,18 @@ RASTER_TILES_URL = os.environ.get('RASTER_TILES_URL', 'http://raster_tiles:8081'
 # Custom user model
 AUTH_USER_MODEL = 'deepgis_auth.User'
 
+# Authentication settings
+LOGIN_URL = 'auth:phone_login'
+LOGIN_REDIRECT_URL = 'index'
+LOGOUT_REDIRECT_URL = 'index'
+
 # Authentication backends
 AUTHENTICATION_BACKENDS = [
     'django.contrib.auth.backends.ModelBackend',
 ]
 
-# Login URL
-LOGIN_URL = 'auth:phone_login'
-LOGIN_REDIRECT_URL = 'index'
+# Phone number field settings
+PHONENUMBER_DEFAULT_REGION = 'US'  # Change this to your default region
 
 # Twilio settings
 TWILIO_ACCOUNT_SID = os.environ.get('TWILIO_ACCOUNT_SID', '')

@@ -1,11 +1,13 @@
 from django.test import TestCase
-from django.contrib.auth.models import User
+from django.contrib.auth import get_user_model
 from django.core.exceptions import ValidationError
 
 from deepgis_xr.apps.core.models import (
     Color, CategoryType, Image, ImageSourceType,
     Labeler, ImageWindow, ImageLabel, CategoryLabel
 )
+
+User = get_user_model()
 
 
 class ColorTests(TestCase):

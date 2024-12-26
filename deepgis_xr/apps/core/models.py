@@ -8,6 +8,8 @@ import random
 from django.db.models import JSONField
 from django.contrib.gis.geos import GEOSGeometry
 from django.contrib.gis.db import models
+from django.conf import settings
+from django.utils.translation import gettext_lazy as _
 
 
 class Color(models.Model):
@@ -92,7 +94,11 @@ class Image(models.Model):
 
 class Labeler(models.Model):
     """User who performs labeling"""
-    user = models.OneToOneField(User, on_delete=models.CASCADE)
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name='labelers'
+    )
 
     def __str__(self):
         return str(self.user)

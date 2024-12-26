@@ -1,6 +1,13 @@
 from django.apps import AppConfig
+from django.utils.translation import gettext_lazy as _
 
 class AuthConfig(AppConfig):
-    default_auto_field = 'django.db.models.BigAutoField'
     name = 'deepgis_xr.apps.auth'
-    label = 'deepgis_auth'  # Use a unique label to avoid conflicts with django.contrib.auth 
+    label = 'deepgis_auth'
+    verbose_name = _('Authentication')
+
+    def ready(self):
+        try:
+            import deepgis_xr.apps.auth.signals  # noqa
+        except ImportError:
+            pass 

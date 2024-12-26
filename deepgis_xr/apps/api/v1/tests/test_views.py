@@ -1,19 +1,22 @@
 import json
-from django.test import TestCase, Client
-from django.contrib.auth.models import User
+from django.test import TestCase
+from django.contrib.auth import get_user_model
 from django.urls import reverse
 from rest_framework import status
+from rest_framework.test import APIClient
 
 from deepgis_xr.apps.core.models import (
     RasterImage, CategoryType, TiledGISLabel, Labeler
 )
+
+User = get_user_model()
 
 
 class BaseAPITest(TestCase):
     """Base class for API tests"""
     
     def setUp(self):
-        self.client = Client()
+        self.client = APIClient()
         self.user = User.objects.create_user(
             username='testuser',
             password='testpass'
