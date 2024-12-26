@@ -19,6 +19,7 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw-src.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/leaflet-freehandshapes@0.3.7/dist/leaflet-freehandshapes.min.js"></script>
     <script src="https://unpkg.com/leaflet.vectorgrid@latest/dist/Leaflet.VectorGrid.bundled.js"></script>
+    <script src="/static/scripts/webclient/map_label.js"></script>
     <style>
         #map {
             position: absolute;
@@ -149,6 +150,36 @@
         .leaflet-draw {
             z-index: 1200;
         }
+
+        .tile-error-notification {
+            position: fixed;
+            top: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            background-color: #ff4444;
+            color: white;
+            padding: 10px 20px;
+            border-radius: 5px;
+            z-index: 1000;
+            display: none;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+            text-align: center;
+        }
+        
+        .retry-button {
+            margin-left: 10px;
+            padding: 5px 10px;
+            background-color: white;
+            border: none;
+            border-radius: 3px;
+            cursor: pointer;
+            color: #ff4444;
+            font-weight: bold;
+        }
+        
+        .retry-button:hover {
+            background-color: #f0f0f0;
+        }
     </style>
 </head>
 
@@ -213,13 +244,16 @@ document.getElementById('map').addEventListener('click', function() {
     }
 });
 
-// Initialize the map centered on ASU Tempe campus
-var map = L.map('map');
+// Initialize the map
+var map = L.map('map', {
+    center: [37.45242726429493, -118.44220561932753],
+    zoom: 15
+});
 
-// Add satellite layer from ESRI
+// Add satellite layer from ESRI as the default base layer
 L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
     attribution: 'Tiles &copy; Esri &mdash; Source: Esri, i-cubed, USDA, USGS, AEX, GeoEye, Getmapping, Aerogrid, IGN, IGP, UPR-EGP, and the GIS User Community',
-    maxZoom: 20,
+    maxZoom: 20
 }).addTo(map);
 
 // Add OpenStreetMap as an optional layer for reference
@@ -227,169 +261,181 @@ var osmLayer = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
     attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
 });
 
-// Add rock tiles layer
-var rockTilesLayer = L.tileLayer('http://localhost:8091/tiles/{z}/{x}/{y}.png', {
-    maxZoom: 23,
+// Add error notification div
+var errorDiv = L.DomUtil.create('div', 'tile-error-notification');
+errorDiv.style.display = 'none';
+document.body.appendChild(errorDiv);
+
+// Function to show error notification
+function showTileError(message, duration = 3000) {
+    errorDiv.textContent = message;
+    errorDiv.style.display = 'block';
+    setTimeout(() => {
+        errorDiv.style.display = 'none';
+    }, duration);
+}
+
+// Create base64 error tile
+var errorTileBase64 = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAQAAAAEAAQMAAABmvDolAAAAA1BMVEXd3d3u346CAAAASElEQVR42u3BMQEAAADCoPVPbQwfoAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAIC3AcUIAAFkqh/QAAAAAElFTkSuQmCC';
+
+// Add rock tiles layer with error handling
+var rockTilesLayer = L.tileLayer('http://localhost:8092/tiles/{z}/{x}/{y}.png', {
+    maxZoom: 20,
     minZoom: 15,
-    attribution: 'Rock Tiles'
+    attribution: 'Rock Tiles',
+    errorTileUrl: 'http://localhost:8092/tiles/empty.png',
+    tileSize: 256,
+    crossOrigin: 'anonymous',
+    keepBuffer: 4,
+    updateWhenIdle: true,
+    updateWhenZooming: false,
+    tms: true,  // Use TMS coordinates
+    bounds: [
+        [37.45011551294956, -118.44343861773824], // SW corner from tilemapresource.xml
+        [37.45473901564029, -118.44097262091682]  // NE corner from tilemapresource.xml
+    ]
+}).on('tileerror', function(e) {
+    if (e.coords.z >= this.options.minZoom && e.coords.z <= this.options.maxZoom) {
+        console.warn('Tile error:', {
+            coords: e.coords,
+            url: e.tile.src,
+            bounds: this.options.bounds,
+            zoom: map.getZoom()
+        });
+    }
+}).on('tileload', function(e) {
+    // Clear any error messages when tiles load successfully
+    var errorDiv = document.querySelector('.tile-error-notification');
+    if (errorDiv && errorDiv.style.display === 'block') {
+        errorDiv.style.display = 'none';
+    }
 });
 
-// Add tileserver layers
-var bfVectorLayer = L.vectorGrid.protobuf('/tiles/data/BF_vector/{z}/{x}/{y}.pbf', {
-    vectorTileLayerStyles: {
-        'BF_12-20-2020_vector': {
-            weight: 1,
-            color: '#f06eaa',
-            opacity: 0.8,
-            fill: true,
-            fillColor: '#f06eaa',
-            fillOpacity: 0.4
-        }
-    },
-    maxZoom: 22,
-    attribution: 'BF Vector Data'
-});
+// Initialize the map centered on the tile bounds
+var bounds = rockTilesLayer.options.bounds;
+var center = [
+    (bounds[0][0] + bounds[1][0]) / 2,
+    (bounds[0][1] + bounds[1][1]) / 2
+];
+map.setView(center, 15);
 
-var c3RasterLayer = L.tileLayer('/tiles/data/C3_raster/{z}/{x}/{y}.png', {
-    maxZoom: 22,
-    attribution: 'C3 Raster'
-});
+// Add debug controls to the map
+var debugControl = L.control({position: 'bottomright'});
+debugControl.onAdd = function(map) {
+    var div = L.DomUtil.create('div', 'debug-control');
+    div.innerHTML = `
+        <div style="background: white; padding: 10px; border-radius: 5px; margin: 10px; box-shadow: 0 2px 5px rgba(0,0,0,0.2);">
+            <div>Zoom: <span id="zoom-level"></span> (max: 20)</div>
+            <div>Center: <span id="map-center"></span></div>
+            <div>Bounds: <span id="map-bounds"></span></div>
+            <div>Tile Coords: <span id="tile-coords"></span></div>
+            <button onclick="retryLoadingTiles()">Retry Loading Tiles</button>
+        </div>
+    `;
+    return div;
+};
+debugControl.addTo(map);
 
-var c3ColorLayer = L.tileLayer('/tiles/data/C3color/{z}/{x}/{y}.png', {
-    maxZoom: 22,
-    attribution: 'C3 Color'
-});
-
-var c329Layer = L.tileLayer('/tiles/data/C3_29/{z}/{x}/{y}.png', {
-    maxZoom: 22,
-    attribution: 'C3-29'
-});
-
-var landsatLayer = L.tileLayer('/tiles/data/landsat_combined/{z}/{x}/{y}.png', {
-    maxZoom: 22,
-    attribution: 'Landsat Combined'
-});
-
-var bf0802Layer = L.tileLayer('/tiles/data/BF_raster_0802/{z}/{x}/{y}.png', {
-    maxZoom: 22,
-    attribution: 'BF 08-02-2020'
-});
-
-var bf1003Layer = L.tileLayer('/tiles/data/BF_raster_1003/{z}/{x}/{y}.png', {
-    maxZoom: 22,
-    attribution: 'BF 10-03-2020'
+// Update debug info when map moves
+map.on('moveend', function() {
+    var zoom = map.getZoom();
+    var center = map.getCenter();
+    var bounds = map.getBounds();
+    var tilePoint = rockTilesLayer._getTilePos(center);
+    
+    document.getElementById('zoom-level').textContent = zoom;
+    document.getElementById('map-center').textContent = `${center.lat.toFixed(4)}, ${center.lng.toFixed(4)}`;
+    document.getElementById('map-bounds').textContent = `SW: ${bounds.getSouthWest().lat.toFixed(4)},${bounds.getSouthWest().lng.toFixed(4)} NE: ${bounds.getNorthEast().lat.toFixed(4)},${bounds.getNorthEast().lng.toFixed(4)}`;
+    document.getElementById('tile-coords').textContent = `x: ${Math.floor(tilePoint.x)}, y: ${Math.floor(tilePoint.y)}, z: ${zoom}`;
+    
+    // Check if we're outside the tile bounds
+    var tileBounds = rockTilesLayer.options.bounds;
+    if (!bounds.intersects(L.latLngBounds(tileBounds))) {
+        showTileError('Warning: View is outside tile coverage area');
+    }
 });
 
 // Add layer control
 var baseMaps = {
-    "Satellite": L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}'),
+    "Satellite": L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+        attribution: 'Tiles &copy; Esri &mdash; Source: Esri, i-cubed, USDA, USGS, AEX, GeoEye, Getmapping, Aerogrid, IGN, IGP, UPR-EGP, and the GIS User Community',
+        maxZoom: 20,
+    }),
     "OpenStreetMap": osmLayer
 };
 
 var overlayMaps = {
-    "Rock Tiles": rockTilesLayer,
-    "BF Vector": bfVectorLayer,
-    "C3 Raster": c3RasterLayer,
-    "C3 Color": c3ColorLayer,
-    "C3-29": c329Layer,
-    "Landsat Combined": landsatLayer,
-    "BF 08-02-2020": bf0802Layer,
-    "BF 10-03-2020": bf1003Layer
+    "Rock Tiles": rockTilesLayer
 };
 
 L.control.layers(baseMaps, overlayMaps).addTo(map);
 
 // Function to fetch metadata from tileserver
 function fetchTileserverMetadata() {
-    fetch('/tiles/data/BF_vector.json')
-        .then(response => response.json())
-        .then(data => {
-            if (data.bounds) {
-                // Set map view to the bounds of the BF vector layer
-                map.fitBounds([
-                    [data.bounds[1], data.bounds[0]], // Southwest corner
-                    [data.bounds[3], data.bounds[2]]  // Northeast corner
-                ]);
-            } else {
-                // Fallback to C3 raster if BF vector metadata is not available
-                fetch('/tiles/data/C3_raster.json')
-                    .then(response => response.json())
-                    .then(data => {
-                        if (data.bounds) {
-                            map.fitBounds([
-                                [data.bounds[1], data.bounds[0]],
-                                [data.bounds[3], data.bounds[2]]
-                            ]);
-                        } else {
-                            // Default view if no metadata is available
-                            map.setView([33.4242, -111.9281], 15);
-                        }
-                    })
-                    .catch(() => map.setView([33.4242, -111.9281], 15));
-            }
-        })
-        .catch(() => map.setView([33.4242, -111.9281], 15));
+    // Set default view since we only have rock tiles
+    map.setView([33.4242, -111.9281], 15);
 }
 
 // Call the function when the page loads
 fetchTileserverMetadata();
 
-// Add BF vector layer and rock tiles to map by default
-bfVectorLayer.addTo(map);
+// Add rock tiles to map by default
 rockTilesLayer.addTo(map);
 
-// Initialize drawing controls
-var drawnItems = new L.FeatureGroup();
-map.addLayer(drawnItems);
+// Add retry functionality
+function retryLoadingTiles() {
+    var activeLayers = [];
+    map.eachLayer(function(layer) {
+        if (layer instanceof L.TileLayer) {
+            activeLayers.push(layer);
+        }
+    });
+    
+    activeLayers.forEach(function(layer) {
+        layer.redraw();
+    });
+}
 
-var drawControl = new L.Control.Draw({
-    draw: {
-        polygon: {
-            showLength: true,
-            shapeOptions: {
-                color: '#f06eaa',
-                weight: 4
-            },
-            touchZoom: false
-        },
-        polyline: false,
-        circle: {
-            showRadius: true,
-            shapeOptions: {
-                color: '#f06eaa',
-                weight: 4
-            }
-        },
-        rectangle: {
-            shapeOptions: {
-                color: '#f06eaa',
-                weight: 4
-            }
-        },
-        circlemarker: false,
-        marker: false
-    },
-    edit: {
-        featureGroup: drawnItems,
-        remove: true
+// Add retry button to error notification
+var retryButton = L.DomUtil.create('button', 'retry-button');
+retryButton.textContent = 'Retry';
+retryButton.onclick = retryLoadingTiles;
+errorDiv.appendChild(retryButton);
+
+// Update error notification styles
+var style = document.createElement('style');
+style.textContent = `
+    .tile-error-notification {
+        position: fixed;
+        top: 20px;
+        left: 50%;
+        transform: translateX(-50%);
+        background-color: #ff4444;
+        color: white;
+        padding: 10px 20px;
+        border-radius: 5px;
+        z-index: 1000;
+        display: none;
+        box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+        text-align: center;
     }
-});
-map.addControl(drawControl);
-
-// Disable map drag when drawing to prevent interference with touch events
-map.on('draw:drawstart', function () {
-    map.dragging.disable();
-});
-
-map.on('draw:drawstop', function () {
-    map.dragging.enable();
-});
-
-// Handle drawing events
-map.on('draw:created', function(e) {
-    var layer = e.layer;
-    drawnItems.addLayer(layer);
-});
+    
+    .retry-button {
+        margin-left: 10px;
+        padding: 5px 10px;
+        background-color: white;
+        border: none;
+        border-radius: 3px;
+        cursor: pointer;
+        color: #ff4444;
+        font-weight: bold;
+    }
+    
+    .retry-button:hover {
+        background-color: #f0f0f0;
+    }
+`;
+document.head.appendChild(style);
 </script>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/2.7.2/Chart.js"></script>

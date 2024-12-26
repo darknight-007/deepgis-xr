@@ -93,9 +93,22 @@ services:
       - db
 
   tileserver:
-    image: nginx:alpine
+    image: maptiler/tileserver-gl
     ports:
       - "8091:80"
+    volumes:
+      - ./static/rock-tiles/mbtiles:/data/mbtiles
+      - ./static/rock-tiles/raw:/data/raw
+    environment:
+      - CORS_ENABLED=true
+      - TILESERVER_GL_DATA_PATH=/data
+    command: ["-p", "80", "--verbose"]
+    restart: unless-stopped
+
+  tileserver-static:
+    image: nginx:alpine
+    ports:
+      - "8092:80"
     volumes:
       - ./static/rock-tiles/raw:/usr/share/nginx/html/tiles
       - ./nginx/tileserver.conf:/etc/nginx/conf.d/default.conf
