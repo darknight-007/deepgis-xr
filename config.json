@@ -1,0 +1,45 @@
+{
+  "options": {
+    "paths": {
+      "root": "/data",
+      "mbtiles": "/data/mbtiles"
+    },
+    "domains": ["localhost:8091"],
+    "formatQuality": {
+      "jpeg": 80,
+      "webp": 90
+    },
+    "maxScaleFactor": 3,
+    "maxSize": 2048,
+    "pbfAlias": "pbf",
+    "serveAllFonts": true,
+    "serveStaticMaps": true
+  },
+  "styles": {},
+  "data": {
+    "v3": {
+      "mbtiles": "C3-29.mbtiles"
+    },
+    "v3color": {
+      "mbtiles": "C3color.mbtiles"
+    },
+    "bf_latest": {
+      "mbtiles": "BF_2-15-2021_3d_43.mbtiles"
+    },
+    "bf_vector": {
+      "mbtiles": "BF_12-20-2020_vector.mbtiles"
+    },
+    "landsat_combined": {
+      "mbtiles": "Landsat_1_2_3.mbtiles"
+    },
+    "kmeans": {
+      "mbtiles": "Kmeans3_11_iters.mbtiles"
+    },
+    "rock_poly": {
+      "mbtiles": "rockPoly_all_v0.mbtiles"
+    },
+    "merged_crowns": {
+      "mbtiles": "merged_crowns.mbtiles"
+    }
+  }
+} 

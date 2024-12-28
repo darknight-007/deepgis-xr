@@ -50,7 +50,7 @@ services:
       - ./deepgis_xr/static:/app/deepgis_xr/static
       - media_volume:/app/media
     ports:
-      - "8090:80"
+      - "8060:80"
     depends_on:
       - web
 

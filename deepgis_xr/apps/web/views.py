@@ -161,4 +161,32 @@ def create_category(request):
             }})
         except json.JSONDecodeError:
             return JsonResponse({'status': 'error', 'message': 'Invalid JSON'}, status=400)
-    return JsonResponse({'status': 'error', 'message': 'Method not allowed'}, status=405) 
+    return JsonResponse({'status': 'error', 'message': 'Method not allowed'}, status=405)
+
+@csrf_exempt
+def get_available_layers(request):
+    """Return available tile layers from config.json"""
+    try:
+        import os
+        config_path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), 'config.json')
+        with open(config_path, 'r') as f:
+            config = json.load(f)
+            
+        layers = []
+        if 'data' in config:
+            for layer_id, layer_info in config['data'].items():
+                layers.append({
+                    'name': layer_id,
+                    'url': f'/tiles/data/{layer_info["mbtiles"]}/{{z}}/{{x}}/{{y}}.png',
+                    'attribution': 'DeepGIS'
+                })
+                
+        return JsonResponse({
+            'status': 'success',
+            'layers': layers
+        })
+    except Exception as e:
+        return JsonResponse({
+            'status': 'error',
+            'message': str(e)
+        }, status=500) 
