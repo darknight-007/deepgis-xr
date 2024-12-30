@@ -5,62 +5,36 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>DeepGIS</title>
-    <link rel="icon" type="image/x-icon" href="/static/favicon.ico">
     <link rel="stylesheet" href="/static/css/style.css">
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.0.0-beta1/dist/css/bootstrap.min.css" rel="stylesheet">
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.0.0-beta1/dist/js/bootstrap.bundle.min.js"></script>
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/4.7.0/css/font-awesome.min.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <link href="/static/css/simple-sidebar.css" rel="stylesheet">
     <link href="https://fonts.googleapis.com/css?family=Roboto&display=swap" rel="stylesheet">
-    <script src="https://code.jquery.com/jquery-3.2.1.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/jquery-mousewheel/3.1.13/jquery.mousewheel.min.js"></script>
+    
+    <!-- Leaflet and plugins -->
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.7.1/dist/leaflet.css" />
-    <script src="https://unpkg.com/leaflet@1.7.1/dist/leaflet.js"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw-src.css"/>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/leaflet-measure@3.1.0/dist/leaflet-measure.css">
+    
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.0.0-beta1/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="https://unpkg.com/leaflet@1.7.1/dist/leaflet.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw-src.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/leaflet-measure@3.1.0/dist/leaflet-measure.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/leaflet-freehandshapes@0.3.7/dist/leaflet-freehandshapes.min.js"></script>
     <script src="https://unpkg.com/leaflet.vectorgrid@latest/dist/Leaflet.VectorGrid.bundled.js"></script>
-    <script src="https://unpkg.com/leaflet-groupedlayercontrol/dist/leaflet.groupedlayercontrol.min.js"></script>
-    <link rel="stylesheet" href="https://unpkg.com/leaflet-groupedlayercontrol/dist/leaflet.groupedlayercontrol.min.css" />
-    <link rel="stylesheet" href="https://code.jquery.com/ui/1.12.1/themes/base/jquery-ui.css">
-    <script src="https://code.jquery.com/ui/1.12.1/jquery-ui.min.js"></script>
+    
+    <!-- Custom styles -->
     <style>
-        /* Reset default margins and padding */
-        html, body {
-            margin: 0;
-            padding: 0;
-            width: 100%;
-            height: 100%;
-            overflow: hidden;
-        }
-
-        #wrapper {
-            width: 100%;
-            height: 100%;
-            margin: 0;
-            padding: 0;
-            position: absolute;
-        }
-
         #map {
             position: absolute;
             top: 0;
             right: 0;
             bottom: 0;
             left: 0;
+            height: 100vh !important;
             width: 100% !important;
-            height: 100% !important;
             z-index: 1;
-            margin: 0;
-            padding: 0;
-        }
-
-        #page-content-wrapper {
-            width: 100%;
-            height: 100%;
-            margin: 0;
-            padding: 0;
-            position: relative;
         }
 
         #sidebar-wrapper {
@@ -75,6 +49,13 @@
 
         #wrapper.show-sidebar #sidebar-wrapper {
             transform: translateX(0);
+        }
+
+        #page-content-wrapper {
+            width: 100%;
+            margin-left: 0;
+            padding: 0;
+            transition: margin-left 0.3s ease-in-out;
         }
 
         .mobile-toggle {
@@ -205,64 +186,15 @@
             background-color: #f0f0f0;
         }
 
-        .histogram-container {
-            position: absolute;
-            bottom: 20px;
-            left: 20px;
-            z-index: 1000;
-            background: white;
-            padding: 10px;
-            border-radius: 5px;
-            box-shadow: 0 2px 5px rgba(0,0,0,0.2);
-            cursor: move;
-            width: 250px;
-            resize: both;
-            overflow: auto;
+        .btn.active {
+            background-color: #0d6efd;
+            color: white;
         }
-
-        .histogram-container canvas {
-            width: 100% !important;
-            height: 150px !important;
-        }
-
-        .range-container {
-            margin-top: 5px;
+        
+        .leaflet-measure-path-measurement {
             font-size: 12px;
-        }
-
-        .range-container input {
-            width: 100%;
-            margin-top: 5px;
-        }
-
-        .histogram-handle {
-            padding: 5px;
-            background: #f8f9fa;
-            border-bottom: 1px solid #dee2e6;
-            margin: -10px -10px 10px -10px;
-            border-radius: 5px 5px 0 0;
-            cursor: move;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-        }
-
-        .histogram-handle .title {
-            font-size: 12px;
-            font-weight: bold;
-        }
-
-        .histogram-handle .controls {
-            display: flex;
-            gap: 5px;
-        }
-
-        .histogram-handle button {
-            padding: 2px 5px;
-            font-size: 10px;
-            border: none;
-            background: none;
-            cursor: pointer;
+            color: black;
+            text-shadow: -1px 0 white, 0 1px white, 1px 0 white, 0 -1px white;
         }
     </style>
 </head>
@@ -278,6 +210,34 @@
             <li class="sidebar-brand">
                 <a href="#" style="font-size: 150%; text-align: center;">DeepGIS</a>
             </li>
+            
+            <!-- Layer Controls -->
+            <li data-toggle="collapse" data-target="#layers" class="collapsed active">
+                <p class="bold"><i class="fa fa-layers" aria-hidden="true"></i> Layers <span class="arrow"></span></p>
+            </li>
+            <ul class="sidebar-nav2 sub-menu collapse show" id="layers">
+                <li>
+                    <div class="form-check">
+                        <input class="form-check-input" type="checkbox" id="baseMapToggle" checked>
+                        <label class="form-check-label" for="baseMapToggle">Base Map</label>
+                    </div>
+                </li>
+                <li>
+                    <div class="form-check">
+                        <input class="form-check-input" type="checkbox" id="overlayToggle" checked>
+                        <label class="form-check-label" for="overlayToggle">Overlay Layer</label>
+                    </div>
+                </li>
+                <li>
+                    <select class="form-select form-select-sm mt-2" id="baseMapSelect">
+                        <option value="satellite">Satellite</option>
+                        <option value="streets">Streets</option>
+                        <option value="terrain">Terrain</option>
+                    </select>
+                </li>
+            </ul>
+
+            <!-- Categories Section -->
             <li data-toggle="collapse" data-target="#categories" class="collapsed active">
                 <p class="bold"><i class="fa fa-list-ul" aria-hidden="true"></i> Categories <span class="arrow"></span></p>
             </li>
@@ -289,52 +249,90 @@
                     <button type="button" title="Add a new category for labels" id="category_submit" style="width:40%;" class="btn btn-primary btn-sm"><i class="fa fa-plus"></i>Add category</button>
                 </div>
             </form>
+
+            <!-- Drawing Tools -->
             <li data-toggle="collapse" data-target="#tools_coll" class="collapsed active">
-                <p class="bold"><i class="fa fa-cog" aria-hidden="true"></i> Free Hand tools <span class="arrow"></span></p>
+                <p class="bold"><i class="fa fa-pencil" aria-hidden="true"></i> Drawing Tools <span class="arrow"></span></p>
             </li>
             <ul class="sidebar-nav2 sub-menu collapse show" id="tools_coll">
-                <button id="freeHandButton" title="Freehand" type="button" class="btn btn-success btn-sm"><i class="fa fa-check"></i>Enable Free Hand</button>
+                <li>
+                    <button id="polygonTool" title="Polygon" type="button" class="btn btn-outline-primary btn-sm mb-2"><i class="fa fa-draw-polygon"></i> Polygon</button>
+                </li>
+                <li>
+                    <button id="freeHandButton" title="Freehand" type="button" class="btn btn-outline-primary btn-sm mb-2"><i class="fa fa-pencil"></i> Freehand</button>
+                </li>
+                <li>
+                    <button id="rectangleTool" title="Rectangle" type="button" class="btn btn-outline-primary btn-sm mb-2"><i class="fa fa-square-o"></i> Rectangle</button>
+                </li>
+                <li>
+                    <button id="circleTool" title="Circle" type="button" class="btn btn-outline-primary btn-sm"><i class="fa fa-circle-o"></i> Circle</button>
+                </li>
             </ul>
-            <li data-toggle="collapse" data-target="#DrawOrHist_col" class="collapsed active">
-                <p class="bold"><i class="fa fa-cog" aria-hidden="true"></i>Toggle Draw/Histogram<span class="arrow"></span></p>
+
+            <!-- Analysis Tools -->
+            <li data-toggle="collapse" data-target="#analysis_tools" class="collapsed active">
+                <p class="bold"><i class="fa fa-chart-bar" aria-hidden="true"></i> Analysis <span class="arrow"></span></p>
             </li>
-            <ul class="sidebar-nav2 sub-menu collapse show" id="DrawOrHist_col">
-                <button id="DrawOrHist" title="DrawOrHist" type="button" class="btn btn-success btn-sm"><i class="fa fa-check"></i>Plot histograms</button>
+            <ul class="sidebar-nav2 sub-menu collapse show" id="analysis_tools">
+                <li>
+                    <button id="measureTool" title="Measure" type="button" class="btn btn-outline-primary btn-sm mb-2"><i class="fa fa-ruler"></i> Measure</button>
+                </li>
+                <li>
+                    <button id="DrawOrHist" title="Plot Histograms" type="button" class="btn btn-outline-primary btn-sm mb-2"><i class="fa fa-chart-bar"></i> Plot Histograms</button>
+                </li>
+                <li>
+                    <button id="ShowAllHist" title="Show All Histograms" type="button" class="btn btn-outline-primary btn-sm"><i class="fa fa-chart-line"></i> Show All Histograms</button>
+                </li>
             </ul>
-            <ul class="sidebar-nav2 sub-menu collapse show" id="ShowAllHist1">
-                <button id="ShowAllHist" title="DrawOrHist" type="button" class="btn btn-outline-primary btn-sm"><i class="fa fa-check"></i>Show all histograms</button>
+
+            <!-- AI Tools -->
+            <li data-toggle="collapse" data-target="#ai_tools" class="collapsed active">
+                <p class="bold"><i class="fa fa-robot" aria-hidden="true"></i> AI Tools <span class="arrow"></span></p>
+            </li>
+            <ul class="sidebar-nav2 sub-menu collapse show" id="ai_tools">
+                <li>
+                    <button id="autoDetect" title="Auto Detect" type="button" class="btn btn-outline-primary btn-sm mb-2"><i class="fa fa-magic"></i> Auto Detect</button>
+                </li>
+                <li>
+                    <button id="refineMask" title="Refine Mask" type="button" class="btn btn-outline-primary btn-sm"><i class="fa fa-wand-magic-sparkles"></i> Refine Mask</button>
+                </li>
             </ul>
+
+            <!-- Export Options -->
+            <li data-toggle="collapse" data-target="#export_options" class="collapsed active">
+                <p class="bold"><i class="fa fa-download" aria-hidden="true"></i> Export <span class="arrow"></span></p>
+            </li>
+            <ul class="sidebar-nav2 sub-menu collapse show" id="export_options">
+                <li>
+                    <button id="exportGeoJSON" title="Export GeoJSON" type="button" class="btn btn-outline-primary btn-sm mb-2"><i class="fa fa-file-code"></i> GeoJSON</button>
+                </li>
+                <li>
+                    <button id="exportShapefile" title="Export Shapefile" type="button" class="btn btn-outline-primary btn-sm"><i class="fa fa-file-archive"></i> Shapefile</button>
+                </li>
+            </ul>
+
+            <!-- Action Buttons -->
+            <li class="mt-4">
+                <button type="button" title="Undo" id="undo" class="btn btn-outline-danger btn-sm w-100 mb-2">
+                    <i class="fa fa-undo"></i> Undo
+                </button>
+                <button id="saveLabels" title="Save Labels" type="button" class="btn btn-success btn-sm w-100">
+                    <i class="fa fa-save"></i> Save Labels
+                </button>
+            </li>
         </ul>
     </div>
     <div id="page-content-wrapper">
         <div id="map"></div>
         <div class="top-right-controls">
-            <a href="https://dreamslab.deepgis.org" class="btn btn-primary"><i class="fa fa-home"></i> DeepGIS Home</a>
             <a href="/webclient/label" class="btn btn-success"><i class="fa fa-sign-out"></i>Label</a>
             <a href="/logout" class="btn btn-danger"><i class="fa fa-sign-out"></i></a>
         </div>
-        <div class="histogram-container">
-            <div class="histogram-handle">
-                <span class="title">Histogram</span>
-                <div class="controls">
-                    <button class="minimize-btn"><i class="fa fa-minus"></i></button>
-                    <button class="close-btn"><i class="fa fa-times"></i></button>
-                </div>
-            </div>
-            <div class="histogram-content">
-                <canvas id="histogram"></canvas>
-                <div class="range-container">
-                    <label for="customRange2" id="customRange2label">Bins: 10</label>
-                    <input type="range" class="form-range" min="5" max="50" value="10" id="customRange2">
-                </div>
-            </div>
-        </div>
-        <div class="tile-error-notification"></div>
     </div>
 </div>
 
 <script>
-// Add this before your existing scripts
+// Mobile sidebar toggle
 document.getElementById('sidebarToggle').addEventListener('click', function() {
     document.getElementById('wrapper').classList.toggle('show-sidebar');
 });
@@ -345,85 +343,7 @@ document.getElementById('map').addEventListener('click', function() {
         document.getElementById('wrapper').classList.remove('show-sidebar');
     }
 });
-
-// Add debug controls to the map
-var debugControl = L.control({position: 'bottomright'});
-debugControl.onAdd = function(map) {
-    var div = L.DomUtil.create('div', 'debug-control');
-    div.innerHTML = `
-        <div style="background: white; padding: 10px; border-radius: 5px; margin: 10px; box-shadow: 0 2px 5px rgba(0,0,0,0.2);">
-            <div>Zoom: <span id="zoom-level"></span> (max: 20)</div>
-            <div>Center: <span id="map-center"></span></div>
-            <div>Bounds: <span id="map-bounds"></span></div>
-            <div>Tile Coords: <span id="tile-coords"></span></div>
-            <button onclick="retryLoadingTiles()">Retry Loading Tiles</button>
-        </div>
-    `;
-    return div;
-};
-
-// Add retry functionality
-function retryLoadingTiles() {
-    var activeLayers = [];
-    map.eachLayer(function(layer) {
-        if (layer instanceof L.TileLayer) {
-            activeLayers.push(layer);
-        }
-    });
-    
-    activeLayers.forEach(function(layer) {
-        layer.redraw();
-    });
-}
-
-// Add error notification div
-var errorDiv = L.DomUtil.create('div', 'tile-error-notification');
-errorDiv.style.display = 'none';
-document.body.appendChild(errorDiv);
-
-// Function to show error notification
-function showTileError(message, duration = 3000) {
-    errorDiv.textContent = message;
-    errorDiv.style.display = 'block';
-    setTimeout(() => {
-        errorDiv.style.display = 'none';
-    }, duration);
-}
-
-// Add retry button to error notification
-var retryButton = L.DomUtil.create('button', 'retry-button');
-retryButton.textContent = 'Retry';
-retryButton.onclick = retryLoadingTiles;
-errorDiv.appendChild(retryButton);
-
-$(document).ready(function() {
-    // Make histogram container draggable
-    $(".histogram-container").draggable({
-        handle: ".histogram-handle",
-        containment: "window"
-    });
-
-    // Minimize/Maximize functionality
-    $(".minimize-btn").click(function() {
-        $(".histogram-content").slideToggle();
-        $(this).find('i').toggleClass('fa-minus fa-plus');
-    });
-
-    // Close functionality
-    $(".close-btn").click(function() {
-        $(".histogram-container").hide();
-    });
-
-    // Show histogram when the button is clicked
-    $("#DrawOrHist").click(function() {
-        if ($(this).find('i').hasClass('fa-check')) {
-            $(".histogram-container").show();
-        }
-    });
-});
 </script>
-
-<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/2.7.2/Chart.js"></script>
 <script src="/static/scripts/webclient/map_label.js"></script>
 </body>
 
