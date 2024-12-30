@@ -1,43 +1,71 @@
-FROM python:3.9-slim
+FROM ubuntu:20.04
 
-# Set environment variables
-ENV PYTHONDONTWRITEBYTECODE 1
-ENV PYTHONUNBUFFERED 1
-ENV DEBIAN_FRONTEND noninteractive
+ENV DEBIAN_FRONTEND=noninteractive
+ENV PYTHONUNBUFFERED=1
+
+# Add UbuntuGIS PPA for latest GDAL
+RUN apt-get update && apt-get install -y software-properties-common
+RUN add-apt-repository ppa:ubuntugis/ppa
 
 # Install system dependencies
 RUN apt-get update && apt-get install -y \
+    python3.9 \
+    python3.9-dev \
+    python3.9-venv \
+    python3-pip \
+    build-essential \
+    libpq-dev \
     gdal-bin \
     libgdal-dev \
     python3-gdal \
-    binutils \
-    libproj-dev \
-    libgeos-dev \
-    postgresql-client \
-    build-essential \
-    python3-dev \
-    python3-pip \
-    python3-setuptools \
-    python3-wheel \
     git \
+    libspatialindex-dev \
+    libproj-dev \
+    proj-data \
+    proj-bin \
+    libgeos-dev \
+    libgeos++-dev \
+    && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 
-# Set GDAL environment variables
-ENV CPLUS_INCLUDE_PATH=/usr/include/gdal
-ENV C_INCLUDE_PATH=/usr/include/gdal
+# Get GDAL version and set environment variables
+RUN export GDAL_VERSION=$(gdal-config --version) && \
+    export CPLUS_INCLUDE_PATH=/usr/include/gdal && \
+    export C_INCLUDE_PATH=/usr/include/gdal && \
+    export GDAL_LIBRARY_PATH=$(gdal-config --prefix)/lib/libgdal.so && \
+    echo "GDAL_VERSION=${GDAL_VERSION}" >> /etc/environment && \
+    echo "CPLUS_INCLUDE_PATH=${CPLUS_INCLUDE_PATH}" >> /etc/environment && \
+    echo "C_INCLUDE_PATH=${C_INCLUDE_PATH}" >> /etc/environment && \
+    echo "GDAL_LIBRARY_PATH=${GDAL_LIBRARY_PATH}" >> /etc/environment
+
+# Create virtual environment
+RUN python3.9 -m venv /opt/venv
+ENV PATH="/opt/venv/bin:$PATH"
+
+# Upgrade pip and install wheel
+RUN pip install --no-cache-dir --upgrade pip wheel setuptools
+
+# Install GDAL with system version
+RUN export GDAL_VERSION=$(gdal-config --version) && \
+    pip install --no-cache-dir GDAL==${GDAL_VERSION}
 
 # Set work directory
 WORKDIR /app
 
-# Install Python dependencies
+# Copy requirements first for better caching
 COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+
+# Install requirements with better error reporting
+RUN pip install --no-cache-dir -r requirements.txt || (echo "Failed to install requirements" && cat /root/.cache/pip/log/*/log && exit 1)
 
 # Copy project
 COPY . .
 
-# Collect static files
-RUN python manage.py collectstatic --noinput
+# Make manage.py executable
+RUN chmod +x manage.py
 
-# Run gunicorn
-CMD ["gunicorn", "--bind", "0.0.0.0:80", "deepgis_xr.wsgi:application"] 
+# Expose port
+EXPOSE 8090
+
+# Run the application
+CMD ["python3.9", "manage.py", "runserver", "0.0.0.0:8090"] 
