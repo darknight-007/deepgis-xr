@@ -2,7 +2,8 @@
   "options": {
     "paths": {
       "root": "/data",
-      "mbtiles": "/data/mbtiles"
+      "mbtiles": "/data/mbtiles",
+      "styles": "/data/styles"
     },
     "domains": ["localhost:8091"],
     "formatQuality": {
@@ -15,31 +16,32 @@
     "serveAllFonts": true,
     "serveStaticMaps": true
   },
-  "styles": {},
+  "styles": {
+    "c3": {
+      "style": {
+        "version": 8,
+        "sources": {
+          "c3": {
+            "type": "raster",
+            "url": "mbtiles:///data/mbtiles/C3-29.mbtiles"
+          }
+        },
+        "layers": [
+          {
+            "id": "c3-layer",
+            "type": "raster",
+            "source": "c3",
+            "minzoom": 0,
+            "maxzoom": 22
+          }
+        ]
+      }
+    }
+  },
   "data": {
-    "v3": {
-      "mbtiles": "C3-29.mbtiles"
-    },
-    "v3color": {
-      "mbtiles": "C3color.mbtiles"
-    },
-    "bf_latest": {
-      "mbtiles": "BF_2-15-2021_3d_43.mbtiles"
-    },
-    "bf_vector": {
-      "mbtiles": "BF_12-20-2020_vector.mbtiles"
-    },
-    "landsat_combined": {
-      "mbtiles": "Landsat_1_2_3.mbtiles"
-    },
-    "kmeans": {
-      "mbtiles": "Kmeans3_11_iters.mbtiles"
-    },
-    "rock_poly": {
-      "mbtiles": "rockPoly_all_v0.mbtiles"
-    },
-    "merged_crowns": {
-      "mbtiles": "merged_crowns.mbtiles"
+    "c3": {
+      "mbtiles": "/data/mbtiles/C3-29.mbtiles",
+      "type": "raster"
     }
   }
 } 

@@ -6,11 +6,12 @@ from django.views.generic import TemplateView
 from django.shortcuts import render
 from django.views.decorators.csrf import csrf_exempt
 import json
+import os
 
 from deepgis_xr.apps.core.models import Image, CategoryType, ImageLabel
 
 
-class BaseView(LoginRequiredMixin, TemplateView):
+class BaseView(TemplateView):
     """Base class for all web views"""
     
     def get_context_data(self, **kwargs):
@@ -67,120 +68,23 @@ map_label = MapLabelView.as_view()
 view_label = ViewLabelView.as_view()
 results = ResultsView.as_view()
 
-def index(request):
-    return render(request, 'web/index.html')
-
-def label(request):
-    return render(request, 'web/label.html')
-
-def map_label(request):
-    return render(request, 'web/map_label.html')
-
-def view_label(request):
-    return render(request, 'web/view_label.html')
-
-def results(request):
-    return render(request, 'web/results.html')
-
-@csrf_exempt
-def get_category_info(request):
-    # Return categories in the format expected by the frontend
-    categories = {
-        'Buildings': {
-            'color': '#FF0000',
-            'id': 1
-        },
-        'Roads': {
-            'color': '#00FF00',
-            'id': 2
-        },
-        'Water Bodies': {
-            'color': '#0000FF',
-            'id': 3
-        }
-    }
-    return JsonResponse(categories)
-
-@csrf_exempt
-def get_new_image(request):
-    # For now, return a sample response
-    response = {
-        'status': 'success',
-        'image_url': '/static/images/sample.jpg',
-        'image_id': '123'
-    }
-    return JsonResponse(response)
-
-@csrf_exempt
-def save_label(request):
-    if request.method == 'POST':
-        try:
-            data = json.loads(request.body)
-            # Here you would save the label data
-            # For now, just return success
-            return JsonResponse({'status': 'success'})
-        except json.JSONDecodeError:
-            return JsonResponse({'status': 'error', 'message': 'Invalid JSON'}, status=400)
-    return JsonResponse({'status': 'error', 'message': 'Method not allowed'}, status=405)
-
-@csrf_exempt
-def create_category(request):
-    if request.method == 'POST':
-        try:
-            data = json.loads(request.body)
-            category_name = data.get('name')
-            
-            # Get existing categories
-            categories = {
-                'Buildings': {
-                    'color': '#FF0000',
-                    'id': 1
-                },
-                'Roads': {
-                    'color': '#00FF00',
-                    'id': 2
-                },
-                'Water Bodies': {
-                    'color': '#0000FF',
-                    'id': 3
-                }
-            }
-            
-            # Add new category with a random color
-            import random
-            color = '#{:06x}'.format(random.randint(0, 0xFFFFFF))
-            categories[category_name] = {
-                'color': color,
-                'id': len(categories) + 1
-            }
-            
-            return JsonResponse({'status': 'success', 'category': {
-                'name': category_name,
-                'color': color,
-                'id': len(categories)
-            }})
-        except json.JSONDecodeError:
-            return JsonResponse({'status': 'error', 'message': 'Invalid JSON'}, status=400)
-    return JsonResponse({'status': 'error', 'message': 'Method not allowed'}, status=405)
 
 @csrf_exempt
 def get_available_layers(request):
-    """Return available tile layers from config.json"""
+    """Return available tile layers"""
     try:
-        import os
-        config_path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), 'config.json')
-        with open(config_path, 'r') as f:
-            config = json.load(f)
-            
-        layers = []
-        if 'data' in config:
-            for layer_id, layer_info in config['data'].items():
-                layers.append({
-                    'name': layer_id,
-                    'url': f'/tiles/data/{layer_info["mbtiles"]}/{{z}}/{{x}}/{{y}}.png',
-                    'attribution': 'DeepGIS'
-                })
-                
+        layers = [
+            {
+                'name': 'Raw Rock Data (C3)',
+                'url': 'http://localhost:8091/data/c3/{z}/{x}/{y}.png',
+                'attribution': 'DeepGIS Rock Data'
+            },
+            {
+                'name': 'Colorized Rock Data',
+                'url': 'http://localhost:8091/data/c3_color/{z}/{x}/{y}.png',
+                'attribution': 'DeepGIS Rock Data'
+            }
+        ]
         return JsonResponse({
             'status': 'success',
             'layers': layers
@@ -189,4 +93,103 @@ def get_available_layers(request):
         return JsonResponse({
             'status': 'error',
             'message': str(e)
-        }, status=500) 
+        }, status=500)
+
+
+@csrf_exempt
+def get_category_info(request):
+    """Return available categories"""
+    try:
+        categories = {
+            'Rock': {
+                'color': '#FF0000',
+                'id': 1
+            },
+            'Vegetation': {
+                'color': '#00FF00',
+                'id': 2
+            },
+            'Shadow': {
+                'color': '#0000FF',
+                'id': 3
+            }
+        }
+        return JsonResponse(categories)
+    except Exception as e:
+        return JsonResponse({
+            'status': 'error',
+            'message': str(e)
+        }, status=500)
+
+
+@csrf_exempt
+def get_new_image(request):
+    """Return a new image for labeling"""
+    try:
+        return JsonResponse({
+            'status': 'success',
+            'image_url': '/static/images/sample.jpg',
+            'image_id': '123'
+        })
+    except Exception as e:
+        return JsonResponse({
+            'status': 'error',
+            'message': str(e)
+        }, status=500)
+
+
+@csrf_exempt
+def save_label(request):
+    """Save a label"""
+    if request.method == 'POST':
+        try:
+            data = json.loads(request.body)
+            # TODO: Save label data to database
+            return JsonResponse({
+                'status': 'success'
+            })
+        except json.JSONDecodeError:
+            return JsonResponse({
+                'status': 'error',
+                'message': 'Invalid JSON'
+            }, status=400)
+    return JsonResponse({
+        'status': 'error',
+        'message': 'Method not allowed'
+    }, status=405)
+
+
+@csrf_exempt
+def create_category(request):
+    """Create a new category"""
+    if request.method == 'POST':
+        try:
+            data = json.loads(request.body)
+            name = data.get('name')
+            if not name:
+                return JsonResponse({
+                    'status': 'error',
+                    'message': 'Category name is required'
+                }, status=400)
+            
+            # TODO: Save category to database
+            import random
+            color = '#{:06x}'.format(random.randint(0, 0xFFFFFF))
+            
+            return JsonResponse({
+                'status': 'success',
+                'category': {
+                    'name': name,
+                    'color': color,
+                    'id': len(CategoryType.objects.all()) + 1
+                }
+            })
+        except json.JSONDecodeError:
+            return JsonResponse({
+                'status': 'error',
+                'message': 'Invalid JSON'
+            }, status=400)
+    return JsonResponse({
+        'status': 'error',
+        'message': 'Method not allowed'
+    }, status=405) 

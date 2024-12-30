@@ -5,6 +5,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>DeepGIS</title>
+    <link rel="icon" type="image/x-icon" href="/static/favicon.ico">
     <link rel="stylesheet" href="/static/css/style.css">
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.0.0-beta1/dist/css/bootstrap.min.css" rel="stylesheet">
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.0.0-beta1/dist/js/bootstrap.bundle.min.js"></script>
@@ -19,16 +20,47 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw-src.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/leaflet-freehandshapes@0.3.7/dist/leaflet-freehandshapes.min.js"></script>
     <script src="https://unpkg.com/leaflet.vectorgrid@latest/dist/Leaflet.VectorGrid.bundled.js"></script>
+    <script src="https://unpkg.com/leaflet-groupedlayercontrol/dist/leaflet.groupedlayercontrol.min.js"></script>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet-groupedlayercontrol/dist/leaflet.groupedlayercontrol.min.css" />
+    <link rel="stylesheet" href="https://code.jquery.com/ui/1.12.1/themes/base/jquery-ui.css">
+    <script src="https://code.jquery.com/ui/1.12.1/jquery-ui.min.js"></script>
     <style>
+        /* Reset default margins and padding */
+        html, body {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+        }
+
+        #wrapper {
+            width: 100%;
+            height: 100%;
+            margin: 0;
+            padding: 0;
+            position: absolute;
+        }
+
         #map {
             position: absolute;
             top: 0;
             right: 0;
             bottom: 0;
             left: 0;
-            height: 100vh !important;
             width: 100% !important;
+            height: 100% !important;
             z-index: 1;
+            margin: 0;
+            padding: 0;
+        }
+
+        #page-content-wrapper {
+            width: 100%;
+            height: 100%;
+            margin: 0;
+            padding: 0;
+            position: relative;
         }
 
         #sidebar-wrapper {
@@ -43,13 +75,6 @@
 
         #wrapper.show-sidebar #sidebar-wrapper {
             transform: translateX(0);
-        }
-
-        #page-content-wrapper {
-            width: 100%;
-            margin-left: 0;
-            padding: 0;
-            transition: margin-left 0.3s ease-in-out;
         }
 
         .mobile-toggle {
@@ -179,6 +204,66 @@
         .retry-button:hover {
             background-color: #f0f0f0;
         }
+
+        .histogram-container {
+            position: absolute;
+            bottom: 20px;
+            left: 20px;
+            z-index: 1000;
+            background: white;
+            padding: 10px;
+            border-radius: 5px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+            cursor: move;
+            width: 250px;
+            resize: both;
+            overflow: auto;
+        }
+
+        .histogram-container canvas {
+            width: 100% !important;
+            height: 150px !important;
+        }
+
+        .range-container {
+            margin-top: 5px;
+            font-size: 12px;
+        }
+
+        .range-container input {
+            width: 100%;
+            margin-top: 5px;
+        }
+
+        .histogram-handle {
+            padding: 5px;
+            background: #f8f9fa;
+            border-bottom: 1px solid #dee2e6;
+            margin: -10px -10px 10px -10px;
+            border-radius: 5px 5px 0 0;
+            cursor: move;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .histogram-handle .title {
+            font-size: 12px;
+            font-weight: bold;
+        }
+
+        .histogram-handle .controls {
+            display: flex;
+            gap: 5px;
+        }
+
+        .histogram-handle button {
+            padding: 2px 5px;
+            font-size: 10px;
+            border: none;
+            background: none;
+            cursor: pointer;
+        }
     </style>
 </head>
 
@@ -224,16 +309,27 @@
     <div id="page-content-wrapper">
         <div id="map"></div>
         <div class="top-right-controls">
+            <a href="https://dreamslab.deepgis.org" class="btn btn-primary"><i class="fa fa-home"></i> DeepGIS Home</a>
             <a href="/webclient/label" class="btn btn-success"><i class="fa fa-sign-out"></i>Label</a>
             <a href="/logout" class="btn btn-danger"><i class="fa fa-sign-out"></i></a>
         </div>
-        <div class="histogram-container" style="position: absolute; bottom: 20px; left: 20px; z-index: 1000; background: white; padding: 10px; border-radius: 5px;">
-            <canvas id="histogram" width="400" height="200"></canvas>
-            <div class="range-container">
-                <label for="customRange2" id="customRange2label">Histogram Bins: 10</label>
-                <input type="range" class="form-range" min="5" max="50" value="10" id="customRange2">
+        <div class="histogram-container">
+            <div class="histogram-handle">
+                <span class="title">Histogram</span>
+                <div class="controls">
+                    <button class="minimize-btn"><i class="fa fa-minus"></i></button>
+                    <button class="close-btn"><i class="fa fa-times"></i></button>
+                </div>
+            </div>
+            <div class="histogram-content">
+                <canvas id="histogram"></canvas>
+                <div class="range-container">
+                    <label for="customRange2" id="customRange2label">Bins: 10</label>
+                    <input type="range" class="form-range" min="5" max="50" value="10" id="customRange2">
+                </div>
             </div>
         </div>
+        <div class="tile-error-notification"></div>
     </div>
 </div>
 
@@ -299,6 +395,32 @@ var retryButton = L.DomUtil.create('button', 'retry-button');
 retryButton.textContent = 'Retry';
 retryButton.onclick = retryLoadingTiles;
 errorDiv.appendChild(retryButton);
+
+$(document).ready(function() {
+    // Make histogram container draggable
+    $(".histogram-container").draggable({
+        handle: ".histogram-handle",
+        containment: "window"
+    });
+
+    // Minimize/Maximize functionality
+    $(".minimize-btn").click(function() {
+        $(".histogram-content").slideToggle();
+        $(this).find('i').toggleClass('fa-minus fa-plus');
+    });
+
+    // Close functionality
+    $(".close-btn").click(function() {
+        $(".histogram-container").hide();
+    });
+
+    // Show histogram when the button is clicked
+    $("#DrawOrHist").click(function() {
+        if ($(this).find('i').hasClass('fa-check')) {
+            $(".histogram-container").show();
+        }
+    });
+});
 </script>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/2.7.2/Chart.js"></script>
