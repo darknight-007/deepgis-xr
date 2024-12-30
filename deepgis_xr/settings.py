@@ -94,7 +94,7 @@ USE_L10N = True
 USE_TZ = True
 
 # Static and Media Files
-STATIC_URL = '/static/'
+STATIC_URL = '/static/deepgis/'
 STATIC_ROOT = os.path.join(BASE_DIR, 'static')
 STATICFILES_DIRS = [
     os.path.join(BASE_DIR, 'deepgis_xr', 'static'),
@@ -151,4 +151,8 @@ PHONENUMBER_DEFAULT_REGION = 'US'  # Change this to your default region
 # Twilio settings
 TWILIO_ACCOUNT_SID = os.environ.get('TWILIO_ACCOUNT_SID', '')
 TWILIO_AUTH_TOKEN = os.environ.get('TWILIO_AUTH_TOKEN', '')
-TWILIO_PHONE_NUMBER = os.environ.get('TWILIO_PHONE_NUMBER', '') 
+TWILIO_PHONE_NUMBER = os.environ.get('TWILIO_PHONE_NUMBER', '')
+
+# Tile server settings
+TILESERVER_URL = 'http://tileserver'
+TILESERVER_PORT = '80' 

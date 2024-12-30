@@ -18,11 +18,6 @@ services:
     volumes:
       - .:/app
       - ./static:/app/static
-      - /mnt/2tbc2000mx500ssd/deepgis/deepgis_rocks/static-root/C3_mask_v3.tif:/app/static/C3_mask_v3.tif
-      - /mnt/2tbc2000mx500ssd/deepgis/deepgis_rocks/static-root/pb-rock.stl:/app/static/pb-rock.stl
-      - /mnt/2tbc2000mx500ssd/deepgis/deepgis_rocks/static-root/C3.tif:/app/static/C3.tif
-      - /mnt/2tbc2000mx500ssd/deepgis/deepgis_rocks/rocks-coord-list.csv:/app/static/rocks-coord-list.csv
-      - /mnt/2tbc2000mx500ssd/deepgis/deepgis_rocks_static_serving_nginx/static/rock-tiles:/app/static/rock-tiles
       - media_volume:/app/media
     ports:
       - "8060:8090"

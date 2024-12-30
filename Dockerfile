@@ -25,6 +25,8 @@ RUN apt-get update && apt-get install -y \
     proj-bin \
     libgeos-dev \
     libgeos++-dev \
+    libffi-dev \
+    libsqlite3-mod-spatialite \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 
@@ -45,7 +47,7 @@ ENV PATH="/opt/venv/bin:$PATH"
 # Upgrade pip and install wheel
 RUN pip install --no-cache-dir --upgrade pip wheel setuptools
 
-# Install GDAL with system version
+# Install GDAL with system version first
 RUN export GDAL_VERSION=$(gdal-config --version) && \
     pip install --no-cache-dir GDAL==${GDAL_VERSION}
 
@@ -55,8 +57,10 @@ WORKDIR /app
 # Copy requirements first for better caching
 COPY requirements.txt .
 
-# Install requirements with better error reporting
-RUN pip install --no-cache-dir -r requirements.txt || (echo "Failed to install requirements" && cat /root/.cache/pip/log/*/log && exit 1)
+# Install requirements with better error reporting and ensure fiona is installed after GDAL
+RUN pip install --no-cache-dir -r requirements.txt && \
+    pip install --no-cache-dir fiona==$(pip show fiona | grep Version | cut -d' ' -f2) --no-binary fiona || \
+    (echo "Failed to install requirements" && cat /root/.cache/pip/log/*/log && exit 1)
 
 # Copy project
 COPY . .
