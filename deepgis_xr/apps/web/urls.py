@@ -14,4 +14,8 @@ urlpatterns = [
     path('webclient/getNewImage', views.get_new_image, name='get_new_image'),
     path('webclient/saveLabel', views.save_label, name='save_label'),
     path('webclient/createCategory', views.create_category, name='create_category'),
+    
+    # Map label endpoints
+    path('webclient/save-labels', views.save_labels, name='save_labels'),
+    path('webclient/export-shapefile', views.export_shapefile, name='export_shapefile'),
 ] 

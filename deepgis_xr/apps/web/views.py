@@ -1,4 +1,4 @@
-from django.http import HttpResponse, JsonResponse
+from django.http import HttpResponse, JsonResponse, FileResponse
 from django.template import loader
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.mixins import LoginRequiredMixin
@@ -6,6 +6,11 @@ from django.views.generic import TemplateView
 from django.shortcuts import render
 from django.views.decorators.csrf import csrf_exempt
 import json
+import tempfile
+import zipfile
+import os
+from shapely.geometry import shape
+import fiona
 
 from deepgis_xr.apps.core.models import Image, CategoryType, ImageLabel
 
@@ -161,4 +166,64 @@ def create_category(request):
             }})
         except json.JSONDecodeError:
             return JsonResponse({'status': 'error', 'message': 'Invalid JSON'}, status=400)
+    return JsonResponse({'status': 'error', 'message': 'Method not allowed'}, status=405)
+
+@csrf_exempt
+def save_labels(request):
+    if request.method == 'POST':
+        try:
+            data = json.loads(request.body)
+            # Save the GeoJSON data to your database or file system
+            # This is a simplified example - you'll want to add proper validation and error handling
+            return JsonResponse({'status': 'success'})
+        except Exception as e:
+            return JsonResponse({'status': 'error', 'message': str(e)})
+    return JsonResponse({'status': 'error', 'message': 'Method not allowed'}, status=405)
+
+@csrf_exempt
+def export_shapefile(request):
+    if request.method == 'POST':
+        try:
+            data = json.loads(request.body)
+            
+            # Create a temporary directory for the shapefile
+            with tempfile.TemporaryDirectory() as tmpdir:
+                # Define the schema based on your GeoJSON properties
+                schema = {
+                    'geometry': 'Polygon',
+                    'properties': {'category': 'str', 'label_id': 'int'},
+                }
+                
+                # Create a shapefile from the GeoJSON
+                shp_path = f"{tmpdir}/labels.shp"
+                with fiona.open(shp_path, 'w', 
+                              driver='ESRI Shapefile',
+                              crs='EPSG:4326',
+                              schema=schema) as shp:
+                    # Write each feature to the shapefile
+                    for feature in data['features']:
+                        shp.write({
+                            'geometry': feature['geometry'],
+                            'properties': feature['properties']
+                        })
+                
+                # Create a ZIP file containing the shapefile components
+                zip_path = f"{tmpdir}/labels.zip"
+                with zipfile.ZipFile(zip_path, 'w') as zipf:
+                    for ext in ['.shp', '.shx', '.dbf', '.prj']:
+                        filename = f"labels{ext}"
+                        filepath = f"{tmpdir}/{filename}"
+                        if os.path.exists(filepath):
+                            zipf.write(filepath, filename)
+                
+                # Return the ZIP file
+                return FileResponse(
+                    open(zip_path, 'rb'),
+                    content_type='application/zip',
+                    as_attachment=True,
+                    filename='labels.zip'
+                )
+                
+        except Exception as e:
+            return JsonResponse({'status': 'error', 'message': str(e)})
     return JsonResponse({'status': 'error', 'message': 'Method not allowed'}, status=405) 

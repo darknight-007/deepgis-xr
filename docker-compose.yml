@@ -24,8 +24,8 @@ services:
       - /mnt/2tbc2000mx500ssd/deepgis/deepgis_rocks/rocks-coord-list.csv:/app/static/rocks-coord-list.csv
       - /mnt/2tbc2000mx500ssd/deepgis/deepgis_rocks_static_serving_nginx/static/rock-tiles:/app/static/rock-tiles
       - media_volume:/app/media
-    expose:
-      - 8090
+    ports:
+      - "8060:8090"
     environment:
       - DEBUG=1
       - DJANGO_SETTINGS_MODULE=deepgis_xr.settings
@@ -42,17 +42,6 @@ services:
         condition: service_healthy
       redis:
         condition: service_started
-
-  nginx:
-    image: nginx:1.25
-    volumes:
-      - ./nginx/dreamslab.deepgis.org.conf:/etc/nginx/conf.d/default.conf
-      - ./deepgis_xr/static:/app/deepgis_xr/static
-      - media_volume:/app/media
-    ports:
-      - "8090:80"
-    depends_on:
-      - web
 
   db:
     image: postgis/postgis:13-3.3
@@ -111,7 +100,7 @@ services:
       - "8092:80"
     volumes:
       - ./static/rock-tiles/raw:/usr/share/nginx/html/tiles
-      - ./nginx/tileserver.conf:/etc/nginx/conf.d/default.conf
+      - /home/jdas/dreams-lab-website-server/deepgis-xr/nginx/tileserver.conf:/etc/nginx/conf.d/default.conf
     restart: unless-stopped
 
 volumes:
