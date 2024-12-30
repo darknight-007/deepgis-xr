@@ -40,6 +40,15 @@
     },
     "merged_crowns": {
       "mbtiles": "merged_crowns.mbtiles"
+    },
+    "raw": {
+      "source": "raw",
+      "type": "raster",
+      "tilejson": {
+        "bounds": [-118.44343861773824, 37.45011551294956, -118.44097262091682, 37.45473901564029],
+        "minzoom": 15,
+        "maxzoom": 23
+      }
     }
   }
 } 

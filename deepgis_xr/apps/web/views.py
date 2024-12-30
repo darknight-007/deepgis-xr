@@ -12,7 +12,7 @@ import os
 from shapely.geometry import shape
 import fiona
 
-from deepgis_xr.apps.core.models import Image, CategoryType, ImageLabel
+from deepgis_xr.apps.core.models import Image, CategoryType, ImageLabel, RasterImage
 
 
 class BaseView(LoginRequiredMixin, TemplateView):
@@ -226,4 +226,32 @@ def export_shapefile(request):
                 
         except Exception as e:
             return JsonResponse({'status': 'error', 'message': str(e)})
-    return JsonResponse({'status': 'error', 'message': 'Method not allowed'}, status=405) 
+    return JsonResponse({'status': 'error', 'message': 'Method not allowed'}, status=405)
+
+@csrf_exempt
+def get_raster_info(request):
+    """Get information about available raster layers."""
+    
+    try:
+        rasters = RasterImage.objects.all()
+        raster_info = []
+        
+        for raster in rasters:
+            raster_info.append({
+                'name': raster.name,
+                'path': raster.path,
+                'attribution': raster.attribution,
+                'minZoom': raster.min_zoom,
+                'maxZoom': raster.max_zoom,
+                'lat_lng': [raster.latitude, raster.longitude]
+            })
+        
+        return JsonResponse({
+            'status': 'success',
+            'message': raster_info
+        })
+    except Exception as e:
+        return JsonResponse({
+            'status': 'error',
+            'message': str(e)
+        }, status=500) 

@@ -88,6 +88,7 @@ services:
     volumes:
       - ./static/rock-tiles/mbtiles:/data/mbtiles
       - ./static/rock-tiles/raw:/data/raw
+      - ./config.json:/data/config.json
     environment:
       - CORS_ENABLED=true
       - TILESERVER_GL_DATA_PATH=/data
@@ -100,7 +101,7 @@ services:
       - "8092:80"
     volumes:
       - ./static/rock-tiles/raw:/usr/share/nginx/html/tiles
-      - /home/jdas/dreams-lab-website-server/deepgis-xr/nginx/tileserver.conf:/etc/nginx/conf.d/default.conf
+      - ./nginx/tileserver.conf:/etc/nginx/conf.d/default.conf
     restart: unless-stopped
 
 volumes:
