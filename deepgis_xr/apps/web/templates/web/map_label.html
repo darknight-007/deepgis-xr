@@ -4,78 +4,144 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>DeepGIS</title>
-    <link rel="stylesheet" href="/static/css/style.css">
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.0.0-beta1/dist/css/bootstrap.min.css" rel="stylesheet">
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    <link href="/static/css/simple-sidebar.css" rel="stylesheet">
-    <link href="https://fonts.googleapis.com/css?family=Roboto&display=swap" rel="stylesheet">
+    <title>DeepGIS Map</title>
     
     <!-- Leaflet and plugins -->
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.7.1/dist/leaflet.css" />
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw-src.css"/>
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/leaflet-measure@3.1.0/dist/leaflet-measure.css">
-    
-    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.0.0-beta1/dist/js/bootstrap.bundle.min.js"></script>
-    <script src="https://unpkg.com/leaflet@1.7.1/dist/leaflet.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw-src.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/leaflet-measure@3.1.0/dist/leaflet-measure.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/leaflet-freehandshapes@0.3.7/dist/leaflet-freehandshapes.min.js"></script>
-    <script src="https://unpkg.com/leaflet.vectorgrid@latest/dist/Leaflet.VectorGrid.bundled.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.0.0-beta1/dist/css/bootstrap.min.css" rel="stylesheet">
     
     <!-- Custom styles -->
     <style>
+        html, body {
+            height: 100%;
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+        }
+
         #map {
             position: absolute;
             top: 0;
             right: 0;
             bottom: 0;
             left: 0;
-            height: 100vh !important;
-            width: 100% !important;
+            width: 100%;
+            height: 100%;
             z-index: 1;
         }
 
         #sidebar-wrapper {
             width: 250px;
             position: fixed;
-            height: 100vh;
+            height: 100%;
             z-index: 1000;
-            transform: translateX(-100%);
+            top: 0;
+            right: 0;
+            transform: translateX(100%);
             transition: transform 0.3s ease-in-out;
             background: white;
+            box-shadow: -2px 0 5px rgba(0,0,0,0.1);
+            overflow-y: auto;
         }
 
         #wrapper.show-sidebar #sidebar-wrapper {
             transform: translateX(0);
         }
 
-        #page-content-wrapper {
-            width: 100%;
-            margin-left: 0;
-            padding: 0;
-            transition: margin-left 0.3s ease-in-out;
-        }
-
         .mobile-toggle {
             position: fixed;
             top: 10px;
-            left: 10px;
+            right: 10px;
             z-index: 2000;
             background: white;
             border: none;
             border-radius: 4px;
             padding: 8px;
             box-shadow: 0 2px 4px rgba(0,0,0,0.2);
-            display: none;
         }
 
-        .btn {
-            padding: 8px 16px;
-            margin: 5px;
-            font-size: 14px;
-            touch-action: manipulation;
+        .deepgis-link {
+            position: fixed;
+            top: 20px;
+            left: 20px;
+            z-index: 1000;
+            background: white;
+            padding: 8px 15px;
+            border-radius: 4px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+            text-decoration: none;
+            color: #333;
+            font-weight: bold;
+            display: flex;
+            align-items: center;
+            gap: 5px;
+        }
+
+        .deepgis-link:hover {
+            background: #f8f9fa;
+            color: #0056b3;
+        }
+
+        .sidebar-nav {
+            padding: 0;
+            list-style: none;
+        }
+
+        .sidebar-brand {
+            padding: 15px;
+            background: #f8f9fa;
+            border-bottom: 1px solid #dee2e6;
+        }
+
+        .sidebar-brand a {
+            color: #333;
+            text-decoration: none;
+            font-size: 1.2em;
+            font-weight: bold;
+        }
+
+        .layer-controls {
+            padding: 15px;
+        }
+
+        .form-check {
+            margin-bottom: 10px;
+        }
+
+        #baseMapSelect {
+            width: 100%;
+            margin-top: 10px;
+        }
+
+        #categories_coll {
+            list-style: none;
+            padding: 0;
+            margin: 15px 0;
+        }
+
+        #categories_coll li.grid {
+            display: grid;
+            grid-template-columns: auto 1fr auto;
+            align-items: center;
+            gap: 10px;
+            padding: 5px 10px;
+        }
+
+        #categories_coll .circle {
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+        }
+
+        #histogram {
+            width: 100%;
+            height: 200px;
+            margin: 15px 0;
+            border: 1px solid #dee2e6;
+            border-radius: 4px;
         }
 
         @media (max-width: 768px) {
@@ -87,264 +153,86 @@
                 width: 80%;
                 max-width: 250px;
             }
-
-            .btn {
-                padding: 12px 20px;
-                font-size: 16px;
-            }
-
-            .sidebar-nav2 button {
-                width: 90%;
-                margin: 8px auto;
-                display: block;
-            }
-
-            #categories .form-control {
-                font-size: 16px;
-                padding: 10px;
-            }
-
-            .top-right-controls {
-                gap: 5px;
-            }
-
-            .top-right-controls .btn {
-                padding: 8px 12px;
-                font-size: 14px;
-            }
-
-            .leaflet-top.leaflet-left {
-                top: 60px;
-                left: 10px;
-            }
-
-            .leaflet-control-zoom {
-                margin-top: 10px !important;
-            }
-
-            .leaflet-draw-toolbar a {
-                width: 40px !important;
-                height: 40px !important;
-                line-height: 40px !important;
-            }
         }
 
-        .top-right-controls {
-            position: absolute;
-            top: 10px;
-            right: 10px;
-            z-index: 1000;
-            display: flex;
-            gap: 10px;
+        #map {
+            height: 100vh;
+            width: 100%;
         }
-
+        
+        /* Adjust layer control position to prevent overlap */
+        .leaflet-control-layers {
+            margin-top: 40px !important;  /* Add space above layer control */
+        }
+        
         .leaflet-top.leaflet-right {
-            top: 60px;
-        }
-
-        .leaflet-top.leaflet-left {
-            top: 10px;
-            left: 50px;
-        }
-
-        .leaflet-popup,
-        .leaflet-tooltip {
-            z-index: 1500;
-        }
-
-        .leaflet-draw {
-            z-index: 1200;
-        }
-
-        .tile-error-notification {
-            position: fixed;
-            top: 20px;
-            left: 50%;
-            transform: translateX(-50%);
-            background-color: #ff4444;
-            color: white;
-            padding: 10px 20px;
-            border-radius: 5px;
-            z-index: 1000;
-            display: none;
-            box-shadow: 0 2px 5px rgba(0,0,0,0.2);
-            text-align: center;
-        }
-        
-        .retry-button {
-            margin-left: 10px;
-            padding: 5px 10px;
-            background-color: white;
-            border: none;
-            border-radius: 3px;
-            cursor: pointer;
-            color: #ff4444;
-            font-weight: bold;
-        }
-        
-        .retry-button:hover {
-            background-color: #f0f0f0;
-        }
-
-        .btn.active {
-            background-color: #0d6efd;
-            color: white;
-        }
-        
-        .leaflet-measure-path-measurement {
-            font-size: 12px;
-            color: black;
-            text-shadow: -1px 0 white, 0 1px white, 1px 0 white, 0 -1px white;
+            margin-right: 10px;  /* Add some right margin */
         }
     </style>
 </head>
 
 <body>
-<button class="mobile-toggle" id="sidebarToggle">
-    <i class="fa fa-bars"></i>
-</button>
+    <button class="mobile-toggle" id="sidebarToggle">
+        <i class="fa fa-bars"></i>
+    </button>
 
-<div id="wrapper">
-    <div id="sidebar-wrapper">
-        <ul class="sidebar-nav">
-            <li class="sidebar-brand">
-                <a href="#" style="font-size: 150%; text-align: center;">DeepGIS</a>
-            </li>
-            
-            <!-- Layer Controls -->
-            <li data-toggle="collapse" data-target="#layers" class="collapsed active">
-                <p class="bold"><i class="fa fa-layers" aria-hidden="true"></i> Layers <span class="arrow"></span></p>
-            </li>
-            <ul class="sidebar-nav2 sub-menu collapse show" id="layers">
-                <li>
+    <div id="wrapper">
+        <div id="sidebar-wrapper">
+            <ul class="sidebar-nav">
+                <li class="sidebar-brand">
+                    <a href="https://deepgis.org">
+                        <i class="fas fa-globe"></i> DeepGIS
+                    </a>
+                </li>
+                
+                <div class="layer-controls">
+                    <h6><i class="fa fa-layers"></i> Layer Controls</h6>
                     <div class="form-check">
                         <input class="form-check-input" type="checkbox" id="baseMapToggle" checked>
                         <label class="form-check-label" for="baseMapToggle">Base Map</label>
                     </div>
-                </li>
-                <li>
                     <div class="form-check">
                         <input class="form-check-input" type="checkbox" id="overlayToggle" checked>
                         <label class="form-check-label" for="overlayToggle">Overlay Layer</label>
                     </div>
-                </li>
-                <li>
-                    <select class="form-select form-select-sm mt-2" id="baseMapSelect">
+                    <select class="form-select form-select-sm" id="baseMapSelect">
                         <option value="satellite">Satellite</option>
                         <option value="streets">Streets</option>
                         <option value="terrain">Terrain</option>
                     </select>
-                </li>
-            </ul>
-
-            <!-- Categories Section -->
-            <li data-toggle="collapse" data-target="#categories" class="collapsed active">
-                <p class="bold"><i class="fa fa-list-ul" aria-hidden="true"></i> Categories <span class="arrow"></span></p>
-            </li>
-            <form action="" class="sub-menu collapse show" id="categories">
-                <ul class="sidebar-nav2 sub-menu collapse show" id="categories_coll">
-                </ul>
-                <div style="margin-top: 5px; display: inline-grid; grid-template-rows: 50% 50%; width: 100%; justify-items:center;">
-                    <input class="form-control form-control-sm" style="width: 85%;margin-bottom: 10px;" id="add_new_category" placeholder="Add a new category">
-                    <button type="button" title="Add a new category for labels" id="category_submit" style="width:40%;" class="btn btn-primary btn-sm"><i class="fa fa-plus"></i>Add category</button>
                 </div>
-            </form>
 
-            <!-- Drawing Tools -->
-            <li data-toggle="collapse" data-target="#tools_coll" class="collapsed active">
-                <p class="bold"><i class="fa fa-pencil" aria-hidden="true"></i> Drawing Tools <span class="arrow"></span></p>
-            </li>
-            <ul class="sidebar-nav2 sub-menu collapse show" id="tools_coll">
-                <li>
-                    <button id="polygonTool" title="Polygon" type="button" class="btn btn-outline-primary btn-sm mb-2"><i class="fa fa-draw-polygon"></i> Polygon</button>
-                </li>
-                <li>
-                    <button id="freeHandButton" title="Freehand" type="button" class="btn btn-outline-primary btn-sm mb-2"><i class="fa fa-pencil"></i> Freehand</button>
-                </li>
-                <li>
-                    <button id="rectangleTool" title="Rectangle" type="button" class="btn btn-outline-primary btn-sm mb-2"><i class="fa fa-square-o"></i> Rectangle</button>
-                </li>
-                <li>
-                    <button id="circleTool" title="Circle" type="button" class="btn btn-outline-primary btn-sm"><i class="fa fa-circle-o"></i> Circle</button>
-                </li>
+                <div class="layer-controls">
+                    <h6><i class="fa fa-paint-brush"></i> Categories</h6>
+                    <ul id="categories_coll"></ul>
+                </div>
+
+                <div class="layer-controls">
+                    <h6><i class="fa fa-chart-bar"></i> Histogram</h6>
+                    <canvas id="histogram"></canvas>
+                </div>
             </ul>
-
-            <!-- Analysis Tools -->
-            <li data-toggle="collapse" data-target="#analysis_tools" class="collapsed active">
-                <p class="bold"><i class="fa fa-chart-bar" aria-hidden="true"></i> Analysis <span class="arrow"></span></p>
-            </li>
-            <ul class="sidebar-nav2 sub-menu collapse show" id="analysis_tools">
-                <li>
-                    <button id="measureTool" title="Measure" type="button" class="btn btn-outline-primary btn-sm mb-2"><i class="fa fa-ruler"></i> Measure</button>
-                </li>
-                <li>
-                    <button id="DrawOrHist" title="Plot Histograms" type="button" class="btn btn-outline-primary btn-sm mb-2"><i class="fa fa-chart-bar"></i> Plot Histograms</button>
-                </li>
-                <li>
-                    <button id="ShowAllHist" title="Show All Histograms" type="button" class="btn btn-outline-primary btn-sm"><i class="fa fa-chart-line"></i> Show All Histograms</button>
-                </li>
-            </ul>
-
-            <!-- AI Tools -->
-            <li data-toggle="collapse" data-target="#ai_tools" class="collapsed active">
-                <p class="bold"><i class="fa fa-robot" aria-hidden="true"></i> AI Tools <span class="arrow"></span></p>
-            </li>
-            <ul class="sidebar-nav2 sub-menu collapse show" id="ai_tools">
-                <li>
-                    <button id="autoDetect" title="Auto Detect" type="button" class="btn btn-outline-primary btn-sm mb-2"><i class="fa fa-magic"></i> Auto Detect</button>
-                </li>
-                <li>
-                    <button id="refineMask" title="Refine Mask" type="button" class="btn btn-outline-primary btn-sm"><i class="fa fa-wand-magic-sparkles"></i> Refine Mask</button>
-                </li>
-            </ul>
-
-            <!-- Export Options -->
-            <li data-toggle="collapse" data-target="#export_options" class="collapsed active">
-                <p class="bold"><i class="fa fa-download" aria-hidden="true"></i> Export <span class="arrow"></span></p>
-            </li>
-            <ul class="sidebar-nav2 sub-menu collapse show" id="export_options">
-                <li>
-                    <button id="exportGeoJSON" title="Export GeoJSON" type="button" class="btn btn-outline-primary btn-sm mb-2"><i class="fa fa-file-code"></i> GeoJSON</button>
-                </li>
-                <li>
-                    <button id="exportShapefile" title="Export Shapefile" type="button" class="btn btn-outline-primary btn-sm"><i class="fa fa-file-archive"></i> Shapefile</button>
-                </li>
-            </ul>
-
-            <!-- Action Buttons -->
-            <li class="mt-4">
-                <button type="button" title="Undo" id="undo" class="btn btn-outline-danger btn-sm w-100 mb-2">
-                    <i class="fa fa-undo"></i> Undo
-                </button>
-                <button id="saveLabels" title="Save Labels" type="button" class="btn btn-success btn-sm w-100">
-                    <i class="fa fa-save"></i> Save Labels
-                </button>
-            </li>
-        </ul>
-    </div>
-    <div id="page-content-wrapper">
-        <div id="map"></div>
-        <div class="top-right-controls">
-            <a href="/webclient/label" class="btn btn-success"><i class="fa fa-sign-out"></i>Label</a>
-            <a href="/logout" class="btn btn-danger"><i class="fa fa-sign-out"></i></a>
         </div>
     </div>
-</div>
 
-<script>
-// Mobile sidebar toggle
-document.getElementById('sidebarToggle').addEventListener('click', function() {
-    document.getElementById('wrapper').classList.toggle('show-sidebar');
-});
+    <div id="map"></div>
+    
+    <!-- Scripts -->
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.0.0-beta1/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="https://unpkg.com/leaflet@1.7.1/dist/leaflet.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw-src.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/leaflet-measure@3.1.0/dist/leaflet-measure.min.js"></script>
+    <script src="https://unpkg.com/leaflet.vectorgrid@latest/dist/Leaflet.VectorGrid.bundled.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="/static/deepgis/scripts/webclient/map_label.js"></script>
 
-// Close sidebar when clicking on map on mobile
-document.getElementById('map').addEventListener('click', function() {
-    if (window.innerWidth <= 768) {
-        document.getElementById('wrapper').classList.remove('show-sidebar');
-    }
-});
-</script>
-<script src="/static/scripts/webclient/map_label.js"></script>
+    <script>
+        // Toggle sidebar
+        document.getElementById('sidebarToggle').addEventListener('click', function() {
+            document.getElementById('wrapper').classList.toggle('show-sidebar');
+        });
+    </script>
 </body>
 
 </html>

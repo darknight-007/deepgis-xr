@@ -6,7 +6,7 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 
 # Core Settings
 SECRET_KEY = os.environ.get('SECRET_KEY', 'django-insecure-your-secret-key-here')
-DEBUG = bool(int(os.environ.get('DEBUG', 1)))
+DEBUG = os.environ.get('DEBUG', 'True').lower() == 'true'
 ALLOWED_HOSTS = os.environ.get('ALLOWED_HOSTS', '*').split(',')
 
 # Application definition
@@ -69,12 +69,8 @@ WSGI_APPLICATION = 'deepgis_xr.wsgi.application'
 # Database
 DATABASES = {
     'default': {
-        'ENGINE': 'django.contrib.gis.db.backends.postgis',
-        'NAME': os.environ.get('POSTGRES_DB', 'gis_db'),
-        'USER': os.environ.get('POSTGRES_USER', 'gis_user'),
-        'PASSWORD': os.environ.get('POSTGRES_PASSWORD', 'gis_password'),
-        'HOST': os.environ.get('POSTGRES_HOST', 'db'),
-        'PORT': os.environ.get('POSTGRES_PORT', '5432'),
+        'ENGINE': 'django.db.backends.sqlite3',
+        'NAME': BASE_DIR / 'db.sqlite3',
     }
 }
 
@@ -100,7 +96,7 @@ STATICFILES_DIRS = [
     os.path.join(BASE_DIR, 'deepgis_xr', 'static'),
 ]
 
-MEDIA_URL = '/media/'
+MEDIA_URL = '/media/deepgis/'
 MEDIA_ROOT = os.path.join(BASE_DIR, 'media')
 
 # Default primary key field type
