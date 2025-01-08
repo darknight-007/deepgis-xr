@@ -6,8 +6,6 @@ from django.db import models
 from django.core.validators import MaxValueValidator
 import random
 from django.db.models import JSONField
-from django.contrib.gis.geos import GEOSGeometry
-from django.contrib.gis.db import models
 from django.conf import settings
 from django.utils.translation import gettext_lazy as _
 
@@ -208,7 +206,7 @@ class TiledGISLabel(TiledLabel):
     parent_raster = models.ForeignKey(RasterImage, on_delete=models.CASCADE, null=True, blank=True)
     pub_date = models.DateTimeField(default=datetime.now, blank=True)
     labeler = models.ForeignKey(Labeler, on_delete=models.CASCADE, null=True, blank=True)
-    geometry = models.GeometryField()
+    geometry = models.TextField(max_length=100000)
 
     def __str__(self):
         return f'GIS Label: {self.category} at ({self.northeast_lat},{self.northeast_lng})' 

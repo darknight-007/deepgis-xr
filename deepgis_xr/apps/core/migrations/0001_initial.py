@@ -3,7 +3,6 @@
 import datetime
 import deepgis_xr.apps.core.models
 from django.conf import settings
-import django.contrib.gis.db.models.fields
 import django.core.validators
 from django.db import migrations, models
 import django.db.models.deletion
@@ -81,7 +80,7 @@ class Migration(migrations.Migration):
                 ('label_json', models.JSONField()),
                 ('label_type', models.CharField(choices=[('R', 'Rectangle'), ('C', 'Circle'), ('P', 'Polygon'), ('A', 'Any')], default='R', max_length=1)),
                 ('pub_date', models.DateTimeField(blank=True, default=datetime.datetime.now)),
-                ('geometry', django.contrib.gis.db.models.fields.GeometryField(srid=4326)),
+                ('geometry', models.TextField(max_length=100000)),
                 ('category', models.ForeignKey(blank=True, null=True, on_delete=django.db.models.deletion.CASCADE, to='core.categorytype')),
                 ('labeler', models.ForeignKey(blank=True, null=True, on_delete=django.db.models.deletion.CASCADE, to='core.labeler')),
                 ('parent_raster', models.ForeignKey(blank=True, null=True, on_delete=django.db.models.deletion.CASCADE, to='core.rasterimage')),
