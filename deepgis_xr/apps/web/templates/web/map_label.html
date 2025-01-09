@@ -225,13 +225,55 @@
     <script src="https://cdn.jsdelivr.net/npm/leaflet-measure@3.1.0/dist/leaflet-measure.min.js"></script>
     <script src="https://unpkg.com/leaflet.vectorgrid@latest/dist/Leaflet.VectorGrid.bundled.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="/static/deepgis/scripts/webclient/raster_layers.js"></script>
     <script src="/static/deepgis/scripts/webclient/map_label.js"></script>
 
     <script>
+        // Use the existing map object or create it if it doesn't exist
+        window.map = window.map || L.map('map').setView([40.7128, -74.0060], 13);
+        
+        // Add OpenStreetMap as base layer
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            maxZoom: 19,
+            attribution: '© OpenStreetMap contributors'
+        }).addTo(window.map);
+        
+        // Initialize feature group for drawn items if it doesn't exist
+        window.drawnItems = window.drawnItems || new L.FeatureGroup();
+        window.map.addLayer(window.drawnItems);
+        
+        // Initialize draw control if it doesn't exist
+        if (!window.drawControl) {
+            window.drawControl = new L.Control.Draw({
+                edit: {
+                    featureGroup: window.drawnItems
+                },
+                draw: {
+                    polygon: {
+                        allowIntersection: false,
+                        showArea: true
+                    }
+                }
+            });
+            window.map.addControl(window.drawControl);
+        }
+        
+        // Initialize raster layers
+        window.rasterControl = window.rasterControl || initRasterLayers(window.map);
+        
         // Toggle sidebar
         document.getElementById('sidebarToggle').addEventListener('click', function() {
             document.getElementById('wrapper').classList.toggle('show-sidebar');
         });
+        
+        // Handle draw events (only add if not already bound)
+        if (!window.drawEventsInitialized) {
+            window.map.on(L.Draw.Event.CREATED, function (e) {
+                const layer = e.layer;
+                window.drawnItems.addLayer(layer);
+            });
+            window.drawEventsInitialized = true;
+        }
     </script>
 </body>
 
