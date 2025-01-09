@@ -4,7 +4,7 @@
       "root": "/data",
       "mbtiles": "/data/mbtiles"
     },
-    "domains": ["localhost:8091"],
+    "domains": ["localhost:8091", "192.168.0.186:8091", "deepgis.org"],
     "formatQuality": {
       "jpeg": 80,
       "webp": 90
@@ -16,5 +16,18 @@
     "serveStaticMaps": true
   },
   "styles": {},
-  "data": {}
+  "data": {
+    "BF_08-02-2020_raster": {
+      "mbtiles": "BF_08-02-2020_raster.mbtiles"
+    },
+    "BF_2-15-2021_3d_43": {
+      "mbtiles": "BF_2-15-2021_3d_43.mbtiles"
+    },
+    "BF-12-20-2020": {
+      "mbtiles": "BF-12-20-2020.mbtiles"
+    },
+    "BF_11-13-2020": {
+      "mbtiles": "BF_11-13-2020.mbtiles"
+    }
+  }
 } 
