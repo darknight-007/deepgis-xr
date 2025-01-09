@@ -1,8 +1,8 @@
 // Raster tile layer management
 const rasterLayers = {
-    'BF_08-02-2020': {
+    'bf_aug_2020_raster': {
         name: 'BF August 2020',
-        url: '/tiles/BF_08-02-2020_raster/{z}/{x}/{y}.png',
+        url: 'https://mbtiles.deepgis.org/data/bf_aug_2020_raster/{z}/{x}/{y}.png',
         minZoom: 12,
         maxZoom: 22,
         bounds: [
@@ -11,9 +11,9 @@ const rasterLayers = {
         ],
         center: [33.78210534131368, -111.26527270115186, 17]  // [lat, lng, zoom]
     },
-    'BF_2-15-2021_3d': {
+    'bf_feb_2021_3d': {
         name: 'BF February 2021 3D',
-        url: '/tiles/BF_2-15-2021_3d_43/{z}/{x}/{y}.png',
+        url: 'https://mbtiles.deepgis.org/data/bf_feb_2021_3d/{z}/{x}/{y}.png',
         minZoom: 12,
         maxZoom: 22,
         bounds: [
@@ -22,9 +22,9 @@ const rasterLayers = {
         ],
         center: [33.78210534131368, -111.26527270115186, 17]
     },
-    'BF-12-20-2020': {
+    'bf_dec_2020': {
         name: 'BF December 2020',
-        url: '/tiles/BF-12-20-2020/{z}/{x}/{y}.png',
+        url: 'https://mbtiles.deepgis.org/data/bf_dec_2020/{z}/{x}/{y}.png',
         minZoom: 12,
         maxZoom: 22,
         bounds: [
@@ -33,9 +33,9 @@ const rasterLayers = {
         ],
         center: [33.78210534131368, -111.26527270115186, 17]
     },
-    'BF_11-13-2020': {
+    'bf_nov_2020': {
         name: 'BF November 2020',
-        url: '/tiles/BF_11-13-2020/{z}/{x}/{y}.png',
+        url: 'https://mbtiles.deepgis.org/data/bf_nov_2020/{z}/{x}/{y}.png',
         minZoom: 12,
         maxZoom: 22,
         bounds: [
@@ -49,7 +49,7 @@ const rasterLayers = {
 function initRasterLayers(map) {
     // Create the base layers
     const baseLayers = {
-        'Google Satellite': L.tileLayer('http://{s}.google.com/vt/lyrs=s&x={x}&y={y}&z={z}', {
+        'Google Satellite': L.tileLayer('https://{s}.google.com/vt/lyrs=s&x={x}&y={y}&z={z}', {
             maxZoom: 22,
             subdomains: ['mt0', 'mt1', 'mt2', 'mt3'],
             attribution: '© Google'
@@ -64,7 +64,7 @@ function initRasterLayers(map) {
             minZoom: config.minZoom,
             maxZoom: config.maxZoom,
             bounds: config.bounds,
-            tms: true,
+            tms: false,  // Changed to false since we're using XYZ format
             opacity: 0.7,  // Make overlays slightly transparent
             attribution: '© DeepGIS'
         });
