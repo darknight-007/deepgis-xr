@@ -6,14 +6,13 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>DeepGIS Map</title>
     
-    <!-- Leaflet and plugins -->
-    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.7.1/dist/leaflet.css" />
+    <!-- Core Dependencies -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw-src.css"/>
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/leaflet-measure@3.1.0/dist/leaflet-measure.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.0.0-beta1/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     
-    <!-- Custom styles -->
     <style>
         html, body {
             height: 100%;
@@ -34,7 +33,7 @@
         }
 
         #sidebar-wrapper {
-            width: 250px;
+            width: 300px;
             position: fixed;
             height: 100%;
             z-index: 1000;
@@ -61,87 +60,51 @@
             border-radius: 4px;
             padding: 8px;
             box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+            display: none;
         }
 
-        .deepgis-link {
-            position: fixed;
-            top: 20px;
-            left: 20px;
-            z-index: 1000;
-            background: white;
-            padding: 8px 15px;
-            border-radius: 4px;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.2);
-            text-decoration: none;
-            color: #333;
-            font-weight: bold;
+        .layer-item {
             display: flex;
             align-items: center;
-            gap: 5px;
+            padding: 8px;
+            border-bottom: 1px solid #eee;
         }
 
-        .deepgis-link:hover {
+        .layer-item:hover {
             background: #f8f9fa;
-            color: #0056b3;
-        }
-
-        .sidebar-nav {
-            padding: 0;
-            list-style: none;
-        }
-
-        .sidebar-brand {
-            padding: 15px;
-            background: #f8f9fa;
-            border-bottom: 1px solid #dee2e6;
-        }
-
-        .sidebar-brand a {
-            color: #333;
-            text-decoration: none;
-            font-size: 1.2em;
-            font-weight: bold;
         }
 
         .layer-controls {
             padding: 15px;
+            border-bottom: 1px solid #dee2e6;
         }
 
-        .form-check {
-            margin-bottom: 10px;
+        .layer-group {
+            margin-bottom: 15px;
         }
 
-        #baseMapSelect {
-            width: 100%;
+        .layer-group-title {
+            font-weight: bold;
+            margin-bottom: 8px;
+        }
+
+        /* Vector tile specific styles */
+        .vector-layer-legend {
+            padding: 10px;
+            background: #fff;
+            border-radius: 4px;
+            margin: 5px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.2);
+        }
+
+        .vector-style-control {
             margin-top: 10px;
         }
 
-        #categories_coll {
-            list-style: none;
-            padding: 0;
-            margin: 15px 0;
-        }
-
-        #categories_coll li.grid {
-            display: grid;
-            grid-template-columns: auto 1fr auto;
-            align-items: center;
-            gap: 10px;
-            padding: 5px 10px;
-        }
-
-        #categories_coll .circle {
-            width: 20px;
-            height: 20px;
-            border-radius: 50%;
-        }
-
-        #histogram {
-            width: 100%;
-            height: 200px;
-            margin: 15px 0;
-            border: 1px solid #dee2e6;
-            border-radius: 4px;
+        /* Error handling styles */
+        .tile-error {
+            background: rgba(255, 0, 0, 0.1);
+            border: 1px solid red;
         }
 
         @media (max-width: 768px) {
@@ -151,22 +114,21 @@
 
             #sidebar-wrapper {
                 width: 80%;
-                max-width: 250px;
+                max-width: 300px;
             }
         }
 
-        #map {
-            height: 100vh;
+        #histogram {
             width: 100%;
+            height: 200px;
+            max-width: 800px;
+            max-height: 400px;
         }
-        
-        /* Adjust layer control position to prevent overlap */
-        .leaflet-control-layers {
-            margin-top: 40px !important;  /* Add space above layer control */
-        }
-        
-        .leaflet-top.leaflet-right {
-            margin-right: 10px;  /* Add some right margin */
+
+        .chart-container {
+            position: relative;
+            height: 200px;
+            width: 100%;
         }
     </style>
 </head>
@@ -178,40 +140,62 @@
 
     <div id="wrapper">
         <div id="sidebar-wrapper">
-            <ul class="sidebar-nav">
-                <li class="sidebar-brand">
-                    <a href="https://deepgis.org">
-                        <i class="fas fa-globe"></i> DeepGIS
-                    </a>
-                </li>
+            <div class="sidebar-content">
+                <div class="sidebar-header p-3 bg-light">
+                    <h5 class="m-0"><i class="fas fa-globe"></i> DeepGIS</h5>
+                </div>
                 
                 <div class="layer-controls">
-                    <h6><i class="fa fa-layers"></i> Layer Controls</h6>
-                    <div class="form-check">
-                        <input class="form-check-input" type="checkbox" id="baseMapToggle" checked>
-                        <label class="form-check-label" for="baseMapToggle">Base Map</label>
+                    <div class="layer-group">
+                        <div class="layer-group-title">
+                            <i class="fa fa-layer-group"></i> Base Maps
+                        </div>
+                        <div class="form-check mb-2">
+                            <input class="form-check-input" type="checkbox" id="baseMapToggle" checked>
+                            <label class="form-check-label" for="baseMapToggle">Show Base Map</label>
+                        </div>
+                        <select class="form-select form-select-sm" id="baseMapSelect">
+                            <option value="bf_oct_2020_raster">October 2020</option>
+                            <option value="bf_aug_2020_raster">August 2020</option>
+                            <option value="bf_nov_2020">November 2020</option>
+                            <option value="bf_dec_2020">December 2020</option>
+                            <option value="bf_feb_2021_3d_43">February 2021 3D</option>
+                        </select>
                     </div>
-                    <div class="form-check">
-                        <input class="form-check-input" type="checkbox" id="overlayToggle" checked>
-                        <label class="form-check-label" for="overlayToggle">Overlay Layer</label>
+
+                    <div class="layer-group">
+                        <div class="layer-group-title">
+                            <i class="fa fa-map"></i> Vector Layers
+                        </div>
+                        <div id="vectorLayerList">
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" id="vectorLayerToggle" checked>
+                                <label class="form-check-label" for="vectorLayerToggle">Show Vector Layer</label>
+                            </div>
+                            <select class="form-select form-select-sm mt-2" id="vectorSourceSelect">
+                                <option value="bf_aug_2020_vector">August 2020 Vector</option>
+                                <option value="bf_oct_2020_vector">October 2020 Vector</option>
+                                <option value="bf_dec_2020_vector">December 2020 Vector</option>
+                                <option value="bf_feb_2021_3d">February 2021 3D Vector</option>
+                            </select>
+                        </div>
                     </div>
-                    <select class="form-select form-select-sm" id="baseMapSelect">
-                        <option value="satellite">Satellite</option>
-                        <option value="streets">Streets</option>
-                        <option value="terrain">Terrain</option>
-                    </select>
+
+                    <div class="layer-group">
+                        <div class="layer-group-title">
+                            <i class="fa fa-paint-brush"></i> Categories
+                        </div>
+                        <ul id="categories_coll" class="list-unstyled"></ul>
+                    </div>
                 </div>
 
                 <div class="layer-controls">
-                    <h6><i class="fa fa-paint-brush"></i> Categories</h6>
-                    <ul id="categories_coll"></ul>
+                    <h6><i class="fa fa-chart-bar"></i> Statistics</h6>
+                    <div class="chart-container">
+                        <canvas id="histogram"></canvas>
+                    </div>
                 </div>
-
-                <div class="layer-controls">
-                    <h6><i class="fa fa-chart-bar"></i> Histogram</h6>
-                    <canvas id="histogram"></canvas>
-                </div>
-            </ul>
+            </div>
         </div>
     </div>
 
@@ -219,61 +203,248 @@
     
     <!-- Scripts -->
     <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.0.0-beta1/dist/js/bootstrap.bundle.min.js"></script>
-    <script src="https://unpkg.com/leaflet@1.7.1/dist/leaflet.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw-src.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/leaflet-measure@3.1.0/dist/leaflet-measure.min.js"></script>
     <script src="https://unpkg.com/leaflet.vectorgrid@latest/dist/Leaflet.VectorGrid.bundled.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-    <script src="/static/deepgis/scripts/webclient/raster_layers.js"></script>
-    <script src="/static/deepgis/scripts/webclient/map_label.js"></script>
 
     <script>
-        // Use the existing map object or create it if it doesn't exist
-        window.map = window.map || L.map('map').setView([40.7128, -74.0060], 13);
-        
-        // Add OpenStreetMap as base layer
-        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-            maxZoom: 19,
-            attribution: '© OpenStreetMap contributors'
-        }).addTo(window.map);
-        
-        // Initialize feature group for drawn items if it doesn't exist
-        window.drawnItems = window.drawnItems || new L.FeatureGroup();
-        window.map.addLayer(window.drawnItems);
-        
-        // Initialize draw control if it doesn't exist
-        if (!window.drawControl) {
-            window.drawControl = new L.Control.Draw({
-                edit: {
-                    featureGroup: window.drawnItems
-                },
-                draw: {
-                    polygon: {
-                        allowIntersection: false,
-                        showArea: true
+        // Disable touch events that are causing issues
+        L.Browser.touch = false;
+
+        // Initialize map with default settings
+        const map = L.map('map', {
+            center: [33.78210534131368, -111.26527270115186],
+            zoom: 23,
+            maxZoom: 22,
+            minZoom: 12,
+            zoomControl: true,
+            attributionControl: true,
+            tap: false
+        });
+
+        // Layer management
+        const layers = {
+            base: null,
+            vector: null
+        };
+
+        // Base layer configuration
+        function initBaseLayers() {
+            const baseMapSelect = document.getElementById('baseMapSelect');
+            const baseMapToggle = document.getElementById('baseMapToggle');
+
+            function loadBaseLayer(sourceId) {
+                if (layers.base) {
+                    map.removeLayer(layers.base);
+                }
+
+                const tileUrl = `https://mbtiles.deepgis.org/data/${sourceId}/{z}/{x}/{y}.png`;
+                layers.base = L.tileLayer(tileUrl, {
+                    maxZoom: 22,
+                    tileSize: 256,
+                    updateWhenIdle: true,
+                    updateWhenZooming: false
+                });
+
+                if (baseMapToggle.checked) {
+                    layers.base.addTo(map);
+                }
+            }
+
+            baseMapSelect.addEventListener('change', (e) => loadBaseLayer(e.target.value));
+            baseMapToggle.addEventListener('change', (e) => {
+                if (layers.base) {
+                    if (e.target.checked) {
+                        map.addLayer(layers.base);
+                    } else {
+                        map.removeLayer(layers.base);
                     }
                 }
             });
-            window.map.addControl(window.drawControl);
+
+            // Load initial base layer
+            loadBaseLayer(baseMapSelect.value);
         }
-        
-        // Initialize raster layers
-        window.rasterControl = window.rasterControl || initRasterLayers(window.map);
-        
-        // Toggle sidebar
-        document.getElementById('sidebarToggle').addEventListener('click', function() {
+
+        // Vector layer configuration
+        function initVectorLayers() {
+            const vectorSourceSelect = document.getElementById('vectorSourceSelect');
+            const vectorLayerToggle = document.getElementById('vectorLayerToggle');
+            const MBTILES_SERVER = 'https://mbtiles.deepgis.org';
+
+            const vectorTileOptions = {
+                maxNativeZoom: 22,
+                vectorTileLayerStyles: {
+                    _default: {
+                        weight: 1,
+                        color: '#475569',
+                        fillColor: '#64748B',
+                        fillOpacity: 0.6
+                    }
+                },
+                interactive: true,
+                zIndex: 1000, // Ensure vector layers are above raster
+                rendererFactory: L.canvas.tile,
+                updateWhenIdle: true,
+                updateWhenZooming: false,
+                getFeatureId: (f) => f.properties.id || null
+            };
+
+            async function loadVectorLayer(sourceId) {
+                try {
+                    if (layers.vector) {
+                        map.removeLayer(layers.vector);
+                    }
+
+                    // First try to get the TileJSON endpoint
+                    const tileJsonUrl = `${MBTILES_SERVER}/data/${sourceId}.json`;
+                    console.log('Fetching TileJSON from:', tileJsonUrl);
+                    
+                    const response = await fetch(tileJsonUrl);
+                    if (!response.ok) {
+                        // If TileJSON fails, try the direct vector tile endpoint
+                        console.log('TileJSON not found, trying direct vector endpoint');
+                        const vectorUrl = `${MBTILES_SERVER}/data/${sourceId}/{z}/{x}/{y}.pbf`;
+                        layers.vector = L.vectorGrid.protobuf(vectorUrl, vectorTileOptions);
+                    } else {
+                        const tileJson = await response.json();
+                        console.log('TileJSON loaded:', tileJson);
+                        
+                        if (tileJson.tiles && tileJson.tiles.length > 0) {
+                            // Ensure tile URLs are absolute
+                            const tileUrl = tileJson.tiles[0].startsWith('http') 
+                                ? tileJson.tiles[0] 
+                                : `${MBTILES_SERVER}/data/${sourceId}/{z}/{x}/{y}.pbf`;
+                            
+                            console.log('Using vector tile URL:', tileUrl);
+                            
+                            layers.vector = L.vectorGrid.protobuf(tileUrl, {
+                                ...vectorTileOptions,
+                                maxNativeZoom: tileJson.maxzoom || 22,
+                                minNativeZoom: tileJson.minzoom || 0
+                            });
+                        } else {
+                            throw new Error('No tile URLs found in TileJSON');
+                        }
+                    }
+
+                    // Add error handling for tile loading
+                    layers.vector.on('loading', () => {
+                        console.log('Vector tiles loading...');
+                    });
+
+                    layers.vector.on('load', () => {
+                        console.log('Vector tiles loaded successfully');
+                    });
+
+                    layers.vector.on('tileerror', (e) => {
+                        console.warn('Tile error:', e);
+                    });
+
+                    if (vectorLayerToggle.checked) {
+                        layers.vector.addTo(map);
+                    }
+                } catch (error) {
+                    console.error('Error loading vector layer:', error);
+                    // Try fallback to direct pbf endpoint
+                    try {
+                        console.log('Attempting fallback to direct vector tiles');
+                        const vectorUrl = `${MBTILES_SERVER}/data/${sourceId}/{z}/{x}/{y}.pbf`;
+                        console.log('Fallback URL:', vectorUrl);
+                        layers.vector = L.vectorGrid.protobuf(vectorUrl, vectorTileOptions);
+                        
+                        if (vectorLayerToggle.checked) {
+                            layers.vector.addTo(map);
+                        }
+                    } catch (fallbackError) {
+                        console.error('Fallback failed:', fallbackError);
+                    }
+                }
+            }
+
+            vectorSourceSelect.addEventListener('change', (e) => loadVectorLayer(e.target.value));
+            vectorLayerToggle.addEventListener('change', (e) => {
+                if (layers.vector) {
+                    if (e.target.checked) {
+                        map.addLayer(layers.vector);
+                    } else {
+                        map.removeLayer(layers.vector);
+                    }
+                }
+            });
+
+            // Load initial vector layer
+            loadVectorLayer(vectorSourceSelect.value);
+        }
+
+        // Drawing tools
+        const drawnItems = new L.FeatureGroup().addTo(map);
+        const drawControl = new L.Control.Draw({
+            edit: {
+                featureGroup: drawnItems
+            },
+            draw: {
+                polygon: {
+                    allowIntersection: false,
+                    showArea: true
+                },
+                rectangle: true,
+                circle: false,
+                circlemarker: false,
+                marker: true
+            }
+        });
+        map.addControl(drawControl);
+
+        map.on(L.Draw.Event.CREATED, (e) => {
+            const layer = e.layer;
+            drawnItems.addLayer(layer);
+        });
+
+        // Initialize layers
+        initBaseLayers();
+        initVectorLayers();
+
+        // UI Controls
+        document.getElementById('sidebarToggle').addEventListener('click', () => {
             document.getElementById('wrapper').classList.toggle('show-sidebar');
         });
-        
-        // Handle draw events (only add if not already bound)
-        if (!window.drawEventsInitialized) {
-            window.map.on(L.Draw.Event.CREATED, function (e) {
-                const layer = e.layer;
-                window.drawnItems.addLayer(layer);
-            });
-            window.drawEventsInitialized = true;
-        }
+
+        // Initialize histogram
+        const ctx = document.getElementById('histogram').getContext('2d');
+        const chart = new Chart(ctx, {
+            type: 'bar',
+            data: {
+                labels: [],
+                datasets: [{
+                    label: 'Histogram',
+                    data: [],
+                    backgroundColor: 'rgba(75, 192, 192, 0.2)',
+                    borderColor: 'rgba(75, 192, 192, 1)',
+                    borderWidth: 1
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                scales: {
+                    y: {
+                        beginAtZero: true
+                    }
+                }
+            }
+        });
+
+        new ResizeObserver(entries => {
+            for (let entry of entries) {
+                if (entry.target.id === 'histogram') {
+                    chart.resize();
+                }
+            }
+        }).observe(document.getElementById('histogram'));
     </script>
 </body>
 
