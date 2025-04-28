@@ -7,11 +7,11 @@
     <title>DeepGIS Map</title>
     
     <!-- Core Dependencies -->
-    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw-src.css"/>
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/leaflet-measure@3.1.0/dist/leaflet-measure.css">
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin="anonymous" />
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw-src.css" crossorigin="anonymous"/>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/leaflet-measure@3.1.0/dist/leaflet-measure.css" crossorigin="anonymous">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" crossorigin="anonymous">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet" crossorigin="anonymous">
     
     <style>
         html, body {
@@ -24,10 +24,10 @@
         #map {
             position: absolute;
             top: 0;
-            right: 0;
+            right: 300px;
             bottom: 0;
             left: 0;
-            width: 100%;
+            width: auto;
             height: 100%;
             z-index: 1;
         }
@@ -39,11 +39,10 @@
             z-index: 1000;
             top: 0;
             right: 0;
-            transform: translateX(100%);
-            transition: transform 0.3s ease-in-out;
             background: white;
             box-shadow: -2px 0 5px rgba(0,0,0,0.1);
             overflow-y: auto;
+            transform: translateX(0);
         }
 
         #wrapper.show-sidebar #sidebar-wrapper {
@@ -53,7 +52,7 @@
         .mobile-toggle {
             position: fixed;
             top: 10px;
-            right: 10px;
+            right: 310px;
             z-index: 2000;
             background: white;
             border: none;
@@ -110,11 +109,21 @@
         @media (max-width: 768px) {
             .mobile-toggle {
                 display: block;
+                right: 10px;
             }
 
             #sidebar-wrapper {
+                transform: translateX(100%);
                 width: 80%;
                 max-width: 300px;
+            }
+
+            #map {
+                right: 0;
+            }
+
+            #wrapper.show-sidebar #sidebar-wrapper {
+                transform: translateX(0);
             }
         }
 
@@ -148,44 +157,37 @@
                 <div class="layer-controls">
                     <div class="layer-group">
                         <div class="layer-group-title">
-                            <i class="fa fa-layer-group"></i> Base Maps
+                            <i class="fa fa-calendar"></i> Available Dates
                         </div>
-                        <div class="form-check mb-2">
-                            <input class="form-check-input" type="checkbox" id="baseMapToggle" checked>
-                            <label class="form-check-label" for="baseMapToggle">Show Base Map</label>
-                        </div>
-                        <select class="form-select form-select-sm" id="baseMapSelect">
-                            <option value="bf_oct_2020_raster">October 2020</option>
-                            <option value="bf_aug_2020_raster">August 2020</option>
-                            <option value="bf_nov_2020">November 2020</option>
-                            <option value="bf_dec_2020">December 2020</option>
-                            <option value="bf_feb_2021_3d_43">February 2021 3D</option>
-                        </select>
-                    </div>
-
-                    <div class="layer-group">
-                        <div class="layer-group-title">
-                            <i class="fa fa-map"></i> Vector Layers
-                        </div>
-                        <div id="vectorLayerList">
-                            <div class="form-check">
-                                <input class="form-check-input" type="checkbox" id="vectorLayerToggle" checked>
-                                <label class="form-check-label" for="vectorLayerToggle">Show Vector Layer</label>
-                            </div>
-                            <select class="form-select form-select-sm mt-2" id="vectorSourceSelect">
-                                <option value="bf_aug_2020_vector">August 2020 Vector</option>
-                                <option value="bf_oct_2020_vector">October 2020 Vector</option>
-                                <option value="bf_dec_2020_vector">December 2020 Vector</option>
-                                <option value="bf_feb_2021_3d">February 2021 3D Vector</option>
+                        <div class="form-group mb-3">
+                            <select class="form-select" id="dateSelect">
+                                <!-- Will be populated dynamically -->
                             </select>
                         </div>
                     </div>
 
                     <div class="layer-group">
                         <div class="layer-group-title">
-                            <i class="fa fa-paint-brush"></i> Categories
+                            <i class="fa fa-layer-group"></i> Layer Types
                         </div>
-                        <ul id="categories_coll" class="list-unstyled"></ul>
+                        <div class="form-check mb-2">
+                            <input class="form-check-input" type="checkbox" id="rasterLayerToggle" checked>
+                            <label class="form-check-label" for="rasterLayerToggle">Raster Layer</label>
+                        </div>
+                        <div class="form-check mb-2">
+                                <input class="form-check-input" type="checkbox" id="vectorLayerToggle" checked>
+                            <label class="form-check-label" for="vectorLayerToggle">Vector Layer</label>
+                        </div>
+                    </div>
+
+                    <div class="layer-group">
+                        <div class="layer-group-title">
+                            <i class="fa fa-map"></i> Base Map
+                        </div>
+                        <div class="form-check mb-2">
+                            <input class="form-check-input" type="checkbox" id="baseMapToggle" checked>
+                            <label class="form-check-label" for="baseMapToggle">Show Base Map</label>
+                        </div>
                     </div>
                 </div>
 
@@ -202,249 +204,461 @@
     <div id="map"></div>
     
     <!-- Scripts -->
-    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
-    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw-src.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/leaflet-measure@3.1.0/dist/leaflet-measure.min.js"></script>
-    <script src="https://unpkg.com/leaflet.vectorgrid@latest/dist/Leaflet.VectorGrid.bundled.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js" crossorigin="anonymous"></script>
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/leaflet-measure@3.1.0/dist/leaflet-measure.min.js" crossorigin="anonymous"></script>
+    <script src="https://unpkg.com/leaflet.vectorgrid@latest/dist/Leaflet.VectorGrid.bundled.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js" crossorigin="anonymous"></script>
 
     <script>
-        // Disable touch events that are causing issues
-        L.Browser.touch = false;
+        // Helper function to show notifications
+        function showSnackBar(message) {
+            const snackbar = document.createElement('div');
+            snackbar.style.cssText = `
+                position: fixed;
+                bottom: 20px;
+                left: 50%;
+                transform: translateX(-50%);
+                background-color: #333;
+                color: white;
+                padding: 12px 24px;
+                border-radius: 4px;
+                z-index: 1000;
+                min-width: 250px;
+                text-align: center;
+                box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+            `;
+            snackbar.textContent = message;
+            document.body.appendChild(snackbar);
+            setTimeout(() => snackbar.remove(), 3000);
+        }
 
-        // Initialize map with default settings
-        const map = L.map('map', {
-            center: [33.78210534131368, -111.26527270115186],
-            zoom: 23,
-            maxZoom: 22,
-            minZoom: 12,
-            zoomControl: true,
-            attributionControl: true,
-            tap: false
-        });
+        // Wait for all scripts to load
+        function waitForDependencies() {
+            return new Promise((resolve, reject) => {
+                const checkDependencies = () => {
+                    if (typeof L !== 'undefined' && 
+                        typeof L.map !== 'undefined' && 
+                        typeof L.tileLayer !== 'undefined' &&
+                        typeof L.vectorGrid !== 'undefined') {
+                        resolve();
+                    } else {
+                        setTimeout(checkDependencies, 100);
+                    }
+                };
+                // Set a timeout to avoid infinite waiting
+                setTimeout(() => reject(new Error('Dependencies failed to load')), 10000);
+                checkDependencies();
+            });
+        }
 
-        // Layer management
-        const layers = {
-            base: null,
-            vector: null
-        };
+        // Initialize everything when the document is ready
+        document.addEventListener('DOMContentLoaded', async () => {
+            try {
+                // Disable touch events that are causing issues
+                L.Browser.touch = false;
 
-        // Base layer configuration
-        function initBaseLayers() {
-            const baseMapSelect = document.getElementById('baseMapSelect');
-            const baseMapToggle = document.getElementById('baseMapToggle');
+                // Initialize with sidebar shown
+                document.getElementById('wrapper').classList.add('show-sidebar');
 
-            function loadBaseLayer(sourceId) {
-                if (layers.base) {
-                    map.removeLayer(layers.base);
-                }
+                // Wait for dependencies
+                await waitForDependencies();
 
-                const tileUrl = `https://mbtiles.deepgis.org/data/${sourceId}/{z}/{x}/{y}.png`;
-                layers.base = L.tileLayer(tileUrl, {
+                // Initialize map
+                const map = L.map('map', {
+                    zoomControl: true,
+                    attributionControl: true,
+                    tap: false,
+                    zoom: 22,
                     maxZoom: 22,
-                    tileSize: 256,
-                    updateWhenIdle: true,
-                    updateWhenZooming: false
+                    preferCanvas: true
+                }).setView([33.4255, -111.9400], 15);
+
+                // Test vector tile layer from OSM
+                const testVectorLayer = L.vectorGrid.protobuf(
+                    'https://tile.openstreetmap.org/vectiles/{z}/{x}/{y}.pbf', {
+                    vectorTileLayerStyles: {
+                        water: {
+                            fill: true,
+                            weight: 1,
+                            fillColor: '#06B6D4',
+                            color: '#0891B2',
+                            fillOpacity: 0.2,
+                            opacity: 0.4
+                        },
+                        landcover: {
+                            fill: true,
+                            weight: 1,
+                            fillColor: '#4ADE80',
+                            color: '#22C55E',
+                            fillOpacity: 0.2,
+                            opacity: 0.4
+                        },
+                        landuse: {
+                            fill: true,
+                            weight: 1,
+                            fillColor: '#60A5FA',
+                            color: '#3B82F6',
+                            fillOpacity: 0.2,
+                            opacity: 0.4
+                        },
+                        building: {
+                            fill: true,
+                            weight: 1,
+                            fillColor: '#475569',
+                            color: '#64748B',
+                            fillOpacity: 0.2,
+                            opacity: 0.4
+                        }
+                    },
+                    maxZoom: 22,
+                    tolerance: 5,
+                    attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap contributors</a>'
+                }).addTo(map);
+
+                console.log('Test vector layer added to map');
+
+                // Global variables
+                const MBTILES_SERVER = 'https://mbtiles.deepgis.org';
+
+                // Drawing tools
+                const drawnItems = new L.FeatureGroup().addTo(map);
+                const drawControl = new L.Control.Draw({
+                    edit: {
+                        featureGroup: drawnItems
+                    },
+                    draw: {
+                        polygon: {
+                            allowIntersection: false,
+                            showArea: true
+                        },
+                        rectangle: true,
+                        circle: false,
+                        circlemarker: false,
+                        marker: true
+                    }
+                });
+                map.addControl(drawControl);
+
+                map.on(L.Draw.Event.CREATED, (e) => {
+                    const layer = e.layer;
+                    drawnItems.addLayer(layer);
                 });
 
-                if (baseMapToggle.checked) {
-                    layers.base.addTo(map);
-                }
-            }
-
-            baseMapSelect.addEventListener('change', (e) => loadBaseLayer(e.target.value));
-            baseMapToggle.addEventListener('change', (e) => {
-                if (layers.base) {
-                    if (e.target.checked) {
-                        map.addLayer(layers.base);
-                    } else {
-                        map.removeLayer(layers.base);
-                    }
-                }
-            });
-
-            // Load initial base layer
-            loadBaseLayer(baseMapSelect.value);
-        }
-
-        // Vector layer configuration
-        function initVectorLayers() {
-            const vectorSourceSelect = document.getElementById('vectorSourceSelect');
-            const vectorLayerToggle = document.getElementById('vectorLayerToggle');
-            const MBTILES_SERVER = 'https://mbtiles.deepgis.org';
-
-            const vectorTileOptions = {
-                maxNativeZoom: 22,
-                vectorTileLayerStyles: {
-                    _default: {
-                        weight: 1,
-                        color: '#475569',
-                        fillColor: '#64748B',
-                        fillOpacity: 0.6
-                    }
-                },
-                interactive: true,
-                zIndex: 1000, // Ensure vector layers are above raster
-                rendererFactory: L.canvas.tile,
-                updateWhenIdle: true,
-                updateWhenZooming: false,
-                getFeatureId: (f) => f.properties.id || null
-            };
-
-            async function loadVectorLayer(sourceId) {
-                try {
-                    if (layers.vector) {
-                        map.removeLayer(layers.vector);
-                    }
-
-                    // First try to get the TileJSON endpoint
-                    const tileJsonUrl = `${MBTILES_SERVER}/data/${sourceId}.json`;
-                    console.log('Fetching TileJSON from:', tileJsonUrl);
-                    
-                    const response = await fetch(tileJsonUrl);
-                    if (!response.ok) {
-                        // If TileJSON fails, try the direct vector tile endpoint
-                        console.log('TileJSON not found, trying direct vector endpoint');
-                        const vectorUrl = `${MBTILES_SERVER}/data/${sourceId}/{z}/{x}/{y}.pbf`;
-                        layers.vector = L.vectorGrid.protobuf(vectorUrl, vectorTileOptions);
-                    } else {
-                        const tileJson = await response.json();
-                        console.log('TileJSON loaded:', tileJson);
-                        
-                        if (tileJson.tiles && tileJson.tiles.length > 0) {
-                            // Ensure tile URLs are absolute
-                            const tileUrl = tileJson.tiles[0].startsWith('http') 
-                                ? tileJson.tiles[0] 
-                                : `${MBTILES_SERVER}/data/${sourceId}/{z}/{x}/{y}.pbf`;
-                            
-                            console.log('Using vector tile URL:', tileUrl);
-                            
-                            layers.vector = L.vectorGrid.protobuf(tileUrl, {
-                                ...vectorTileOptions,
-                                maxNativeZoom: tileJson.maxzoom || 22,
-                                minNativeZoom: tileJson.minzoom || 0
-                            });
-                        } else {
-                            throw new Error('No tile URLs found in TileJSON');
-                        }
-                    }
-
-                    // Add error handling for tile loading
-                    layers.vector.on('loading', () => {
-                        console.log('Vector tiles loading...');
-                    });
-
-                    layers.vector.on('load', () => {
-                        console.log('Vector tiles loaded successfully');
-                    });
-
-                    layers.vector.on('tileerror', (e) => {
-                        console.warn('Tile error:', e);
-                    });
-
-                    if (vectorLayerToggle.checked) {
-                        layers.vector.addTo(map);
-                    }
-                } catch (error) {
-                    console.error('Error loading vector layer:', error);
-                    // Try fallback to direct pbf endpoint
+                // Initialize map and load layers
+                async function initializeMap() {
                     try {
-                        console.log('Attempting fallback to direct vector tiles');
-                        const vectorUrl = `${MBTILES_SERVER}/data/${sourceId}/{z}/{x}/{y}.pbf`;
-                        console.log('Fallback URL:', vectorUrl);
-                        layers.vector = L.vectorGrid.protobuf(vectorUrl, vectorTileOptions);
-                        
-                        if (vectorLayerToggle.checked) {
-                            layers.vector.addTo(map);
+                        // Fetch available layers
+                        const response = await fetch(`${MBTILES_SERVER}/data.json`);
+                        if (!response.ok) throw new Error('Failed to fetch layers');
+                        const data = await response.json();
+
+                        // Log available layers
+                        console.group('Available Layers');
+                        console.log('Total layers:', Object.keys(data).length);
+
+                        // Group layers by date
+                        const layersByDate = {};
+                        Object.entries(data).forEach(([id, info]) => {
+                            if (!info || typeof info !== 'object') return;
+                            
+                            // Extract date from layer name (assuming format: BF_MM-DD-YYYY or bf_aug_2020)
+                            let date = 'Unknown';
+                            const dateMatch = info.name.match(/BF_(\d{2}-\d{2}-\d{4})/);
+                            const altDateMatch = info.name.match(/bf_(\w+)_(\d{4})/);
+                            
+                            if (dateMatch) {
+                                date = dateMatch[1];
+                            } else if (altDateMatch) {
+                                const month = altDateMatch[1];
+                                const year = altDateMatch[2];
+                                date = `${month}-${year}`;
+                            }
+                            
+                            if (!layersByDate[date]) {
+                                layersByDate[date] = {
+                                    raster: null,
+                                    vector: null
+                                };
+                            }
+
+                            const layerInfo = {
+                                id,
+                                name: info.name,
+                                format: info.format,
+                                minzoom: info.minzoom,
+                                maxzoom: info.maxzoom,
+                                bounds: info.bounds,
+                                center: info.center
+                            };
+
+                            if (info.format === 'pbf') {
+                                layersByDate[date].vector = layerInfo;
+                            } else {
+                                layersByDate[date].raster = layerInfo;
+                            }
+                        });
+
+                        // Populate date select
+                        const dateSelect = document.getElementById('dateSelect');
+                        const dates = Object.keys(layersByDate).sort((a, b) => {
+                            if (a === 'Unknown') return 1;
+                            if (b === 'Unknown') return -1;
+                            return b.localeCompare(a); // Simple string comparison for mixed date formats
+                        });
+
+                        dates.forEach(date => {
+                            const option = document.createElement('option');
+                            option.value = date;
+                            option.textContent = date;
+                            dateSelect.appendChild(option);
+                        });
+
+                        // Initialize with OpenStreetMap
+                        const osm = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                            attribution: '© OpenStreetMap contributors'
+                        }).addTo(map);
+
+                        // Set up layer toggles
+                        const rasterLayerToggle = document.getElementById('rasterLayerToggle');
+                        const vectorLayerToggle = document.getElementById('vectorLayerToggle');
+                        const baseMapToggle = document.getElementById('baseMapToggle');
+
+                        let currentLayers = {
+                            raster: null,
+                            vector: null
+                        };
+
+                        // Function to load layers for selected date
+                        async function loadLayersForDate(date) {
+                            const layers = layersByDate[date];
+                            if (!layers) return;
+
+                            // Remove current layers
+                            if (currentLayers.raster) {
+                                map.removeLayer(currentLayers.raster);
+                            }
+                            if (currentLayers.vector) {
+                                map.removeLayer(currentLayers.vector);
+                            }
+
+                            // Load raster layer
+                            if (layers.raster) {
+                                const layerPath = layers.raster.name.toLowerCase()
+                                    .replace(/[_\s-]+/g, '_')
+                                    .replace(/\.mbtiles$/, '');
+                                
+                                try {
+                                    currentLayers.raster = L.tileLayer(`${MBTILES_SERVER}/data/${layerPath}/{z}/{x}/{y}.png`, {
+                                        minZoom: layers.raster.minzoom || 0,
+                                        maxZoom: layers.raster.maxzoom || 22,
+                                        bounds: layers.raster.bounds ? L.latLngBounds([
+                                            [layers.raster.bounds[1], layers.raster.bounds[0]],
+                                            [layers.raster.bounds[3], layers.raster.bounds[2]]
+                                        ]) : null
+                                    });
+
+                                    if (rasterLayerToggle.checked) {
+                                        currentLayers.raster.addTo(map);
+                                    }
+                                } catch (error) {
+                                    console.warn('Error loading raster layer:', error);
+                                }
+                            }
+
+                            // Load vector layer
+                            if (layers.vector) {
+                                try {
+                                    // Convert layer name to match the format bf_dec_2020_vector
+                                    const dateMatch = layers.vector.name.match(/BF_(\d{2})-(\d{2})-(\d{4})/i);
+                                    const altDateMatch = layers.vector.name.match(/bf_(\w+)_(\d{4})/i);
+                                    
+                                    let layerPath;
+                                    if (dateMatch) {
+                                        // Convert numeric month to text
+                                        const monthNames = {
+                                            '01': 'jan', '02': 'feb', '03': 'mar', '04': 'apr',
+                                            '05': 'may', '06': 'jun', '07': 'jul', '08': 'aug',
+                                            '09': 'sep', '10': 'oct', '11': 'nov', '12': 'dec'
+                                        };
+                                        const month = monthNames[dateMatch[1]] || 'dec';
+                                        const year = dateMatch[3];
+                                        layerPath = `bf_${month}_${year}_vector`;
+                                    } else if (altDateMatch) {
+                                        layerPath = layers.vector.name.toLowerCase();
+                                    } else {
+                                        layerPath = layers.vector.name.toLowerCase()
+                                            .replace(/[_\s-]+/g, '_')
+                                            .replace(/\.mbtiles$/, '')
+                                            + '_vector';
+                                    }
+
+                                    // Construct URL using exact format
+                                    const directTileUrl = `${MBTILES_SERVER}/data/${layerPath}/{z}/{x}/{y}.pbf`;
+
+                                    console.log('Loading vector layer:', {
+                                        originalName: layers.vector.name,
+                                        layerPath,
+                                        directTileUrl
+                                    });
+
+                                    // Create vector layer
+                                    currentLayers.vector = L.vectorGrid.protobuf(directTileUrl, {
+                                        minZoom: layers.vector.minzoom || 0,
+                                        maxZoom: layers.vector.maxzoom || 22,
+                                        bounds: layers.vector.bounds ? L.latLngBounds([
+                                            [layers.vector.bounds[1], layers.vector.bounds[0]],
+                                            [layers.vector.bounds[3], layers.vector.bounds[2]]
+                                        ]) : null,
+                                        vectorTileLayerStyles: {
+                                            '*': {
+                                                weight: 2,
+                                                color: '#475569',
+                                                fillColor: '#64748B',
+                                                fillOpacity: 0.6
+                                            }
+                                        },
+                                        interactive: true,
+                                        rendererFactory: L.canvas.tile,
+                                        maxNativeZoom: 22,
+                                        tolerance: 5
+                                    });
+
+                                    // Add to map if toggle is checked
+                                    if (vectorLayerToggle.checked && map) {
+                                        map.addLayer(currentLayers.vector);
+                                    }
+
+                                    // Enable vector toggle since layer loaded successfully
+                                    vectorLayerToggle.disabled = false;
+                                    vectorLayerToggle.checked = true;
+
+                                    console.log('Vector layer loaded successfully');
+                                    
+                                } catch (error) {
+                                    console.warn('Error loading vector layer:', error);
+                                    vectorLayerToggle.disabled = true;
+                                    vectorLayerToggle.checked = false;
+                                    showSnackBar('Error loading vector layer. Will retry on next selection.');
+                                }
+                            } else {
+                                // Disable vector toggle if no vector layer available
+                                vectorLayerToggle.disabled = true;
+                                vectorLayerToggle.checked = false;
+                            }
+
+                            // Set map view if bounds available
+                            const layerWithBounds = layers.raster || layers.vector;
+                            if (layerWithBounds && layerWithBounds.bounds) {
+                                map.fitBounds([
+                                    [layerWithBounds.bounds[1], layerWithBounds.bounds[0]],
+                                    [layerWithBounds.bounds[3], layerWithBounds.bounds[2]]
+                                ]);
+                            }
                         }
-                    } catch (fallbackError) {
-                        console.error('Fallback failed:', fallbackError);
+
+                        // Set up event listeners
+                        dateSelect.addEventListener('change', (e) => {
+                            // Reset vector layer toggle state
+                            vectorLayerToggle.disabled = false;
+                            vectorLayerToggle.checked = true;
+                            loadLayersForDate(e.target.value);
+                        });
+
+                        rasterLayerToggle.addEventListener('change', (e) => {
+                            if (currentLayers.raster) {
+                                if (e.target.checked) {
+                                    currentLayers.raster.addTo(map);
+                                } else {
+                                    map.removeLayer(currentLayers.raster);
+                                }
+                            }
+                        });
+
+                        vectorLayerToggle.addEventListener('change', (e) => {
+                            if (currentLayers.vector) {
+                                if (e.target.checked) {
+                                    currentLayers.vector.addTo(map);
+                                } else {
+                                    map.removeLayer(currentLayers.vector);
+                                }
+                            }
+                        });
+
+                        baseMapToggle.addEventListener('change', (e) => {
+                            if (e.target.checked) {
+                                osm.addTo(map);
+                            } else {
+                                map.removeLayer(osm);
+                            }
+                        });
+
+                        // Load initial layers
+                        if (dates.length > 0) {
+                            loadLayersForDate(dates[0]);
+                        }
+
+                    } catch (error) {
+                        console.error('Error initializing map:', error);
+                        showSnackBar('Error loading layers. Please try refreshing the page.');
                     }
                 }
+
+                // Initialize map
+                initializeMap();
+
+                // Initialize histogram
+                const ctx = document.getElementById('histogram').getContext('2d');
+                const chart = new Chart(ctx, {
+                    type: 'bar',
+                    data: {
+                        labels: [],
+                        datasets: [{
+                            label: 'Histogram',
+                            data: [],
+                            backgroundColor: 'rgba(75, 192, 192, 0.2)',
+                            borderColor: 'rgba(75, 192, 192, 1)',
+                            borderWidth: 1
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        scales: {
+                            y: {
+                                beginAtZero: true
+                            }
+                        }
+                    }
+                });
+
+                new ResizeObserver(entries => {
+                    for (let entry of entries) {
+                        if (entry.target.id === 'histogram') {
+                            chart.resize();
+                        }
+                    }
+                }).observe(document.getElementById('histogram'));
+
+            } catch (error) {
+                console.error('Error initializing application:', error);
+                showSnackBar('Error initializing application. Please refresh the page.');
             }
+        });
 
-            vectorSourceSelect.addEventListener('change', (e) => loadVectorLayer(e.target.value));
-            vectorLayerToggle.addEventListener('change', (e) => {
-                if (layers.vector) {
-                    if (e.target.checked) {
-                        map.addLayer(layers.vector);
-                    } else {
-                        map.removeLayer(layers.vector);
-                    }
-                }
-            });
-
-            // Load initial vector layer
-            loadVectorLayer(vectorSourceSelect.value);
+        // Add resize handler to update map when sidebar toggles
+        function updateMapSize() {
+            map.invalidateSize();
         }
 
-        // Drawing tools
-        const drawnItems = new L.FeatureGroup().addTo(map);
-        const drawControl = new L.Control.Draw({
-            edit: {
-                featureGroup: drawnItems
-            },
-            draw: {
-                polygon: {
-                    allowIntersection: false,
-                    showArea: true
-                },
-                rectangle: true,
-                circle: false,
-                circlemarker: false,
-                marker: true
-            }
-        });
-        map.addControl(drawControl);
-
-        map.on(L.Draw.Event.CREATED, (e) => {
-            const layer = e.layer;
-            drawnItems.addLayer(layer);
-        });
-
-        // Initialize layers
-        initBaseLayers();
-        initVectorLayers();
-
-        // UI Controls
+        // UI Controls with map resize
         document.getElementById('sidebarToggle').addEventListener('click', () => {
-            document.getElementById('wrapper').classList.toggle('show-sidebar');
+            const wrapper = document.getElementById('wrapper');
+            wrapper.classList.toggle('show-sidebar');
+            setTimeout(updateMapSize, 300); // Wait for transition to complete
         });
-
-        // Initialize histogram
-        const ctx = document.getElementById('histogram').getContext('2d');
-        const chart = new Chart(ctx, {
-            type: 'bar',
-            data: {
-                labels: [],
-                datasets: [{
-                    label: 'Histogram',
-                    data: [],
-                    backgroundColor: 'rgba(75, 192, 192, 0.2)',
-                    borderColor: 'rgba(75, 192, 192, 1)',
-                    borderWidth: 1
-                }]
-            },
-            options: {
-                responsive: true,
-                maintainAspectRatio: false,
-                scales: {
-                    y: {
-                        beginAtZero: true
-                    }
-                }
-            }
-        });
-
-        new ResizeObserver(entries => {
-            for (let entry of entries) {
-                if (entry.target.id === 'histogram') {
-                    chart.resize();
-                }
-            }
-        }).observe(document.getElementById('histogram'));
     </script>
 </body>
 

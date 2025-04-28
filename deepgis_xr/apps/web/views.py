@@ -11,6 +11,8 @@ import zipfile
 import os
 from shapely.geometry import shape
 import fiona
+import requests
+from urllib.parse import urljoin
 
 from deepgis_xr.apps.core.models import Image, CategoryType, ImageLabel, RasterImage
 
@@ -108,13 +110,115 @@ def get_category_info(request):
 
 @csrf_exempt
 def get_new_image(request):
-    # For now, return a sample response
-    response = {
-        'status': 'success',
-        'image_url': '/static/images/sample.jpg',
-        'image_id': '123'
-    }
-    return JsonResponse(response)
+    """Get a random image from the database for labeling"""
+    import random
+    import os
+    from deepgis_xr.apps.core.models import Image, CategoryType
+    
+    # Try to get a random image from the database
+    try:
+        # Get a random image
+        images = Image.objects.all()
+        if not images.exists():
+            # Fall back to the hard-coded image if no images in database
+            image_number = random.randint(1, 10)
+            image_name = f"image_{image_number}.jpg"
+            path = 'https://deepgis.org/static/images/label-set/navagunjara-ortho-set/'
+            
+            # Get categories
+            categories = ['Buildings', 'Roads', 'Vegetation', 'Water Bodies']
+            shapes = ['circle', 'circle', 'circle', 'circle']
+            colors = ['#FF0000', '#00FF00', '#00AA00', '#0000FF']
+        else:
+            # Get a random image from the database
+            image = random.choice(images)
+            image_name = image.name
+            path = image.path
+            
+            # Use URL format if path doesn't start with http
+            if not path.startswith(('http://', 'https://')):
+                # Add trailing slash if needed
+                if not path.endswith('/'):
+                    path += '/'
+            
+            # Get categories from the image
+            if image.categories.exists():
+                categories = [cat.category_name for cat in image.categories.all()]
+                colors = []
+                shapes = []
+                for cat in image.categories.all():
+                    if cat.color:
+                        r, g, b = cat.color.red, cat.color.green, cat.color.blue
+                        colors.append(f'#{r:02x}{g:02x}{b:02x}')
+                    else:
+                        colors.append('#FF0000')  # Default red
+                    
+                    # Map label_type to shape
+                    if cat.label_type == 'C':
+                        shapes.append('circle')
+                    elif cat.label_type == 'R':
+                        shapes.append('rectangle')
+                    elif cat.label_type == 'P':
+                        shapes.append('bezier')
+                    else:
+                        shapes.append('circle')  # Default to circle
+            else:
+                # Default categories if none are associated with the image
+                categories = ['Buildings', 'Roads', 'Vegetation', 'Water Bodies']
+                shapes = ['circle', 'circle', 'circle', 'circle']
+                colors = ['#FF0000', '#00FF00', '#00AA00', '#0000FF']
+        
+        response = {
+            'status': 'success',
+            'image_name': image_name,
+            'path': path,
+            'categories': categories,
+            'shapes': shapes,
+            'colors': colors,
+            'subimage': {
+                'x': 0,
+                'y': 0,
+                'width': 996,
+                'height': 996,
+                'padding': 0
+            },
+            'metadata': {
+                'UpperLeft': {
+                    'Latitude': 23.456,
+                    'Longitude': 72.123,
+                    'LatitudeDirection': 'N',
+                    'LongitudeDirection': 'E'
+                },
+                'LowerRight': {
+                    'Latitude': 23.455,
+                    'Longitude': 72.124,
+                    'LatitudeDirection': 'N',
+                    'LongitudeDirection': 'E'
+                },
+                'Scale': {
+                    'X': 0.5,
+                    'Y': 0.5
+                }
+            }
+        }
+        return JsonResponse(response)
+    except Exception as e:
+        # Log the error and fallback to default behavior
+        print(f"Error in get_new_image: {str(e)}")
+        # Return a basic error response with a default image
+        image_number = random.randint(1, 10)
+        return JsonResponse({
+            'status': 'error',
+            'message': 'Could not retrieve image from database',
+            'image_name': f"image_{image_number}.jpg",
+            'path': 'https://deepgis.org/static/images/label-set/navagunjara-ortho-set/',
+            'categories': ['Buildings', 'Roads', 'Vegetation', 'Water Bodies'],
+            'shapes': ['circle', 'circle', 'circle', 'circle'],
+            'colors': ['#FF0000', '#00FF00', '#00AA00', '#0000FF'],
+            'subimage': {
+                'x': 0, 'y': 0, 'width': 996, 'height': 996, 'padding': 0
+            }
+        })
 
 @csrf_exempt
 def save_label(request):
@@ -251,6 +355,71 @@ def get_raster_info(request):
             'message': raster_info
         })
     except Exception as e:
+        return JsonResponse({
+            'status': 'error',
+            'message': str(e)
+        }, status=500)
+
+@csrf_exempt
+def get_tileserver_layers(request):
+    """Get available layers from the tileserver."""
+    
+    # Configure tileserver URL - use local for development
+    TILESERVER_URL = 'https://localhost:8091'
+    
+    try:
+        # Fetch layers from tileserver
+        response = requests.get(f'{TILESERVER_URL}/data.json', timeout=5)
+        response.raise_for_status()  # Raise exception for non-200 status codes
+        
+        data = response.json()
+        layers = {}
+        
+        for layer_id, info in data.items():
+            if not isinstance(info, dict):
+                continue
+            
+            # Basic layer info
+            layer = {
+                'id': layer_id,
+                'name': info.get('name', layer_id),
+                'type': 'vector' if info.get('format') == 'pbf' else 'raster'
+            }
+            
+            # Handle tiles URL
+            tiles = info.get('tiles', [])
+            if tiles:
+                tile_url = tiles[0]
+                if tile_url.startswith('/'):
+                    tile_url = urljoin(TILESERVER_URL, tile_url.lstrip('/'))
+            else:
+                # Construct default tile URL
+                ext = 'pbf' if layer['type'] == 'vector' else 'png'
+                tile_url = f'{TILESERVER_URL}/data/{layer_id}/{{z}}/{{x}}/{{y}}.{ext}'
+            
+            layer['url'] = tile_url
+            
+            # Add optional properties if they exist
+            for prop in ['minzoom', 'maxzoom', 'bounds', 'center', 'attribution']:
+                if prop in info:
+                    layer[prop] = info[prop]
+            
+            layers[layer_id] = layer
+        
+        return JsonResponse({
+            'status': 'success',
+            'layers': layers,
+            'tileserver': TILESERVER_URL
+        })
+        
+    except requests.exceptions.RequestException as e:
+        print(f'Tileserver error: {str(e)}')
+        return JsonResponse({
+            'status': 'error',
+            'message': 'Could not connect to tileserver'
+        }, status=503)
+    except Exception as e:
+        print(f'Unexpected error: {str(e)}')
         return JsonResponse({
             'status': 'error',
             'message': str(e)
