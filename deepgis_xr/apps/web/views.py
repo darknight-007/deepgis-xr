@@ -110,115 +110,130 @@ def get_category_info(request):
 
 @csrf_exempt
 def get_new_image(request):
-    """Get a random image from the database for labeling"""
+    """Get an image from the database for labeling, with support for navigation"""
     import random
-    import os
     from deepgis_xr.apps.core.models import Image, CategoryType
     
-    # Try to get a random image from the database
+    # Check if requesting a specific navigation direction
+    direction = request.GET.get('direction', 'next')
+    
+    # Get all images from the database
+    all_images = list(Image.objects.all())
+    
+    # If no images in database, return error response
+    if not all_images:
+        return JsonResponse({
+            'success': False,
+            'message': 'No images available in the database'
+        })
+    
+    # Get the current image ID from session if it exists
+    current_image_id = request.session.get('current_image_id', None)
+    
     try:
-        # Get a random image
-        images = Image.objects.all()
-        if not images.exists():
-            # Fall back to the hard-coded image if no images in database
-            image_number = random.randint(1, 10)
-            image_name = f"image_{image_number}.jpg"
-            path = 'https://deepgis.org/static/images/label-set/navagunjara-ortho-set/'
+        # Find the current image in the list
+        current_index = -1
+        if current_image_id is not None:
+            for i, img in enumerate(all_images):
+                if img.id == current_image_id:
+                    current_index = i
+                    break
+        
+        # Handle navigation based on direction
+        if direction == 'prev' and current_index > 0:
+            # Go to previous image
+            current_index -= 1
+        elif direction == 'next' and current_index < len(all_images) - 1:
+            # Go to next image
+            current_index += 1
+        elif direction == 'next' and (current_index == -1 or current_index == len(all_images) - 1):
+            # Start from beginning if at end or no current image
+            current_index = 0
+        elif direction == 'prev' and (current_index == -1):
+            # Start from last image if no current image and going backwards
+            current_index = len(all_images) - 1
+        
+        # Get the image at the current index
+        image = all_images[current_index]
+        
+        # Save the current image ID in session
+        request.session['current_image_id'] = image.id
+        
+        # Prepare image data for frontend
+        image_name = image.name
+        path = image.path
+        
+        # Ensure the path is a valid image URL, not just a directory
+        # If the path doesn't contain a file extension, it might be a directory
+        if not path.lower().endswith(('.jpg', '.jpeg', '.png', '.gif', '.bmp', '.tiff', '.webp')):
+            # Check if the path ends with a slash, remove it if it does
+            if path.endswith('/'):
+                path = path[:-1]
             
-            # Get categories
+            # Append the image name as the filename if it has an extension
+            if image_name.lower().endswith(('.jpg', '.jpeg', '.png', '.gif', '.bmp', '.tiff', '.webp')):
+                path = f"{path}/{image_name}"
+            else:
+                # Default to a .jpg extension if no extension in the name
+                path = f"{path}/{image_name}.jpg"
+        
+        # Ensure the URL has http/https prefix
+        if not path.startswith(('http://', 'https://')):
+            path = f"https://{path}" if not path.startswith('//') else f"https:{path}"
+        
+        # Process categories
+        if image.categories.exists():
+            categories = [cat.category_name for cat in image.categories.all()]
+            colors = []
+            shapes = []
+            for cat in image.categories.all():
+                if cat.color:
+                    r, g, b = cat.color.red, cat.color.green, cat.color.blue
+                    colors.append(f'#{r:02x}{g:02x}{b:02x}')
+                else:
+                    colors.append('#FF0000')  # Default red
+                
+                # Map label_type to shape
+                if cat.label_type == 'C':
+                    shapes.append('circle')
+                elif cat.label_type == 'R':
+                    shapes.append('rectangle')
+                elif cat.label_type == 'P':
+                    shapes.append('bezier')
+                else:
+                    shapes.append('circle')  # Default to circle
+        else:
+            # Default categories if none are associated with the image
             categories = ['Buildings', 'Roads', 'Vegetation', 'Water Bodies']
             shapes = ['circle', 'circle', 'circle', 'circle']
             colors = ['#FF0000', '#00FF00', '#00AA00', '#0000FF']
-        else:
-            # Get a random image from the database
-            image = random.choice(images)
-            image_name = image.name
-            path = image.path
-            
-            # Use URL format if path doesn't start with http
-            if not path.startswith(('http://', 'https://')):
-                # Add trailing slash if needed
-                if not path.endswith('/'):
-                    path += '/'
-            
-            # Get categories from the image
-            if image.categories.exists():
-                categories = [cat.category_name for cat in image.categories.all()]
-                colors = []
-                shapes = []
-                for cat in image.categories.all():
-                    if cat.color:
-                        r, g, b = cat.color.red, cat.color.green, cat.color.blue
-                        colors.append(f'#{r:02x}{g:02x}{b:02x}')
-                    else:
-                        colors.append('#FF0000')  # Default red
-                    
-                    # Map label_type to shape
-                    if cat.label_type == 'C':
-                        shapes.append('circle')
-                    elif cat.label_type == 'R':
-                        shapes.append('rectangle')
-                    elif cat.label_type == 'P':
-                        shapes.append('bezier')
-                    else:
-                        shapes.append('circle')  # Default to circle
-            else:
-                # Default categories if none are associated with the image
-                categories = ['Buildings', 'Roads', 'Vegetation', 'Water Bodies']
-                shapes = ['circle', 'circle', 'circle', 'circle']
-                colors = ['#FF0000', '#00FF00', '#00AA00', '#0000FF']
         
-        response = {
-            'status': 'success',
+        # Return the image data
+        return JsonResponse({
+            'success': True,
             'image_name': image_name,
-            'path': path,
+            'image_path': path,
             'categories': categories,
             'shapes': shapes,
             'colors': colors,
-            'subimage': {
-                'x': 0,
-                'y': 0,
-                'width': 996,
-                'height': 996,
-                'padding': 0
-            },
-            'metadata': {
-                'UpperLeft': {
-                    'Latitude': 23.456,
-                    'Longitude': 72.123,
-                    'LatitudeDirection': 'N',
-                    'LongitudeDirection': 'E'
-                },
-                'LowerRight': {
-                    'Latitude': 23.455,
-                    'Longitude': 72.124,
-                    'LatitudeDirection': 'N',
-                    'LongitudeDirection': 'E'
-                },
-                'Scale': {
-                    'X': 0.5,
-                    'Y': 0.5
-                }
-            }
-        }
-        return JsonResponse(response)
-    except Exception as e:
-        # Log the error and fallback to default behavior
-        print(f"Error in get_new_image: {str(e)}")
-        # Return a basic error response with a default image
-        image_number = random.randint(1, 10)
-        return JsonResponse({
-            'status': 'error',
-            'message': 'Could not retrieve image from database',
-            'image_name': f"image_{image_number}.jpg",
-            'path': 'https://deepgis.org/static/images/label-set/navagunjara-ortho-set/',
-            'categories': ['Buildings', 'Roads', 'Vegetation', 'Water Bodies'],
-            'shapes': ['circle', 'circle', 'circle', 'circle'],
-            'colors': ['#FF0000', '#00FF00', '#00AA00', '#0000FF'],
-            'subimage': {
-                'x': 0, 'y': 0, 'width': 996, 'height': 996, 'padding': 0
+            'width': getattr(image, 'width', 996),
+            'height': getattr(image, 'height', 996),
+            'navigation': {
+                'has_prev': current_index > 0,
+                'has_next': current_index < len(all_images) - 1,
+                'current_index': current_index + 1,
+                'total_images': len(all_images)
             }
         })
+        
+    except Exception as e:
+        # Log the error
+        print(f"Error in get_new_image: {str(e)}")
+        # Return error response
+        return JsonResponse({
+            'success': False,
+            'message': f'Error loading image: {str(e)}'
+        }, status=500)
 
 @csrf_exempt
 def save_label(request):
@@ -422,5 +437,34 @@ def get_tileserver_layers(request):
         print(f'Unexpected error: {str(e)}')
         return JsonResponse({
             'status': 'error',
+            'message': str(e)
+        }, status=500)
+
+@csrf_exempt
+def get_all_images(request):
+    """Get all images from the database."""
+    try:
+        images = Image.objects.all()
+        image_list = []
+        
+        for image in images:
+            image_data = {
+                'id': image.id,
+                'name': image.name,
+                'path': image.path if image.path.startswith(('http://', 'https://')) else image.path + '/',
+                'width': image.width,
+                'height': image.height,
+                'description': image.description
+            }
+            image_list.append(image_data)
+        
+        return JsonResponse({
+            'success': True,
+            'images': image_list
+        })
+    except Exception as e:
+        print(f'Error in get_all_images: {str(e)}')
+        return JsonResponse({
+            'success': False,
             'message': str(e)
         }, status=500) 

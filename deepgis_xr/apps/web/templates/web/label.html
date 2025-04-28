@@ -1,1468 +1,1039 @@
-<!DOCTYPE html>
-<html>
+{% extends "base.html" %}
+{% load static %}
 
-<head>
-	<meta charset="UTF-8">
-	<meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
-	<title>DeepGIS Web</title>
-	<!--<link rel="stylesheet" href="/static/scripts/paperjs/examples/css/style.css"> -->
+{% block content %}
 
-	<link rel="stylesheet" href="/static/css/style.css">
-	<link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0-beta.3/css/bootstrap.min.css" integrity="sha384-Zug+QiDoJOrZ5t4lssLdxGhVrurbmBWopoEl+M6BdEfwnCJZtKxi1KgxUyJq13dy" crossorigin="anonymous">
-	<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/4.7.0/css/font-awesome.min.css">
-	<link href="/static/css/simple-sidebar.css" rel="stylesheet">
-	<link href="https://fonts.googleapis.com/css?family=Roboto&display=swap" rel="stylesheet">
-
-	<script type="text/javascript" src="/static/scripts/paperjs/dist/paper-full.min.js"></script>
-	<!-- <script type='text/javascript' src='http://code.jquery.com/jquery-1.8.2.js'></script> -->
-	<script type="text/javascript' src='/static/scripts/jQuery/jquery-3.0.0.min.js"></script>
-	<!--<link rel="stylesheet" href="//code.jquery.com/ui/1.11.4/themes/smoothness/jquery-ui.css"> -->
-	<script src="https://code.jquery.com/jquery-3.2.1.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/jquery-mousewheel/3.1.13/jquery.mousewheel.min.js"></script>
-
-	<script type="text/paperscript" canvas="canvas">
-	window.globals = {};
-	globals.startPoint = {};
-	globals.raster = {};
-	globals.isActive = false;
-	globals.chosenTool = 'circle';
-	globals.categoryGroups = {};
-	globals.categoryShapes = {};
-	globals.initialCenter = {};
-	globals.panStep = 1;
-	globals.AnnotationsDrawn = false;
-	globals.Annotations = [];
-	globals.editPreviousLabels = -1;
-	var labelsLayer = new paper.Layer();
-
-	var create_groups_shapes = function(categories, colors, shapes) {
-		var groups = {};
-		for (i = 0; i < categories.length; i++) {
-			groups[categories[i]] = new Group({
-				name: categories[i],
-				strokeColor: colors[i],
-				fillColor: colors[i],
-				strokeWidth: 0,
-				opacity: 0.5,
-				visible: true
-			});
-			globals.categoryShapes[categories[i]] = shapes[i];
-		}
-		globals.categoryGroups = groups;
-	};
-
-	globals.create_groups_shapes = create_groups_shapes;
-	globals.labelsDrawn = 0;
-	globals.aboveExistingLabel = false;
-	globals.dragged = false;
-	globals.locationData = {};
-	$("#scaleDiv").hide();
-	function convertDecimalToDegree(data)
-	{
-		//adding logic for sign
-		var sign = '';
-		if(data<0)
-		{
-				sign = '-';
-		}
-
-		data = Math.abs(data);
-
-		//get degrees
-		var degrees = Math.floor(data);
-
-		//get minutes
-		var minuteDecimals = 60*(data - degrees);
-		var minutes = Math.floor(minuteDecimals);
-
-		//get seconds
-		var seconds = Math.floor((minuteDecimals - minutes)*60);
-
-		var coordinateString = sign + degrees + '&#176 ' + minutes + '\' ' + seconds + '\"';
-		return coordinateString
+<style>
+	/* Updated styles for better layout */
+	.wrapper {
+		display: flex;
+		flex-direction: column;
+		height: calc(100vh - 56px); /* Account for navbar */
+		overflow: hidden;
 	}
 
-	$(document).ready(function() {
-
-		//get canvas div position offset
-		var canvasDiv = $("#canvas").first();
-		var canvasPosition = canvasDiv.position();
-		$("#gpsDiv").toggle(false);
-
-		//add function to show pixel position of mouse on canvas
-		$("#canvas").mousemove(function() {
-			var xLocation = event.pageX-canvasPosition.left-303;
-			var yLocation = event.pageY-canvasPosition.top-3;
-			if (globals.locationData.UpperLeft == undefined) {
-				return;
-			}
-			// calculate point in lat long scale
-			var y_point = globals.locationData.UpperLeft.Latitude + (((globals.locationData.LowerRight.Latitude - globals.locationData.UpperLeft.Latitude)*yLocation)/996)
-			var x_point = globals.locationData.UpperLeft.Longitude + (((globals.locationData.LowerRight.Longitude - globals.locationData.UpperLeft.Longitude)*xLocation)/996)
-
-			//convert to degree format
-			var xCoord = convertDecimalToDegree(x_point);
-			var yCoord = convertDecimalToDegree(y_point);
-
-			var latContent = "Lat: " + yCoord + " " + globals.locationData.UpperLeft.LatitudeDirection;
-			var lonContent = "Lon: " + xCoord + " " + globals.locationData.UpperLeft.LongitudeDirection;
-
-			var scaleContent;
-
-			//get pixel to m scale
-			var scaleX = Math.abs(globals.locationData.Scale.X);
-			var scaleY = Math.abs(globals.locationData.Scale.Y);
-
-			if(scaleX == scaleY)
-			{
-				scaleContent = "Scale: " + scaleX + " m/px"
-			}
-			else {
-				scaleContent = "Scale: " + "x: " + scaleX + " m/px, y: "+ scaleY+" m/px";
-			}
-
-			if(xLocation >= 0 && xLocation <= 996 && yLocation >= 0 && yLocation <= 996)
-			{
-				$("#gpsDiv").toggle(true);
-				$("#gpsLat").html(latContent);
-				$("#gpsLon").html(lonContent);
-				$("#scaleText").html(scaleContent)
-			}
-			else {
-				$("#gpsDiv").toggle(false);
-			}
-		});
-
-		$("#canvas").mouseout(function(){
-			$("#gpsDiv").toggle(false);
-		});
-
-		$("#applyLabels").click(function() {
-			endTime = Date.now();
-			timeTaken = endTime - startTime;
-			labelsLayer.view.zoom = 1;
-			window.labelsLayer.view.zoom = 1;
-			labelsLayer.view.setCenter(globals.initialCenter);
-
-			//Check if there are labels or if the no label checkbox is checked
-			if (globals.labelsDrawn <= 0 && !$('#noLabels').prop('checked')) {
-				alert('No labels drawn in image. If there are no labelable features in this image,' +
-				' check the "No Labels in image" checkbox');
-				return false;
-			}
-
-			$('#noLabels').prop('checked', false);
-			var prevLabels = globals.labelsDrawn;
-			globals.labelsDrawn = 0;
-
-			var group_svgs = {};
-			for (var key in globals.categoryGroups) {
-				var g_svg = globals.categoryGroups[key].exportSVG({
-					embedImages: false,
-					asString: true,
-					matchShapes: true
-				});
-				group_svgs[key] = g_svg;
-			}
-			var svg = window.labelsLayer.exportSVG({
-				embedImages: false,
-				asString: false,
-				matchShapes: true
-			});
-
-			//Align circles to original image
-			svg.getElementsByTagName('image')[0].remove(); //Remove embedded image
-			var orig_img = svg.getElementsByTagName('image')[0];
-			orig_img.setAttribute('x', 0);
-			orig_img.setAttribute('y', 0);
-
-			xmlSer = new XMLSerializer();
-			svg = xmlSer.serializeToString(svg);
-			$.ajax({
-				url: "/webclient/applyLabels",
-				type: "POST",
-				dataType: 'text',
-				data: JSON.stringify({
-					image_name: currentImage.image_name,
-					path: currentImage.path,
-					label_list: svg,
-					editLabel: globals.editPreviousLabels,
-					category_labels: group_svgs,
-					subimage: {
-						x: imageX,
-						y: imageY,
-						width: imageWidth,
-						height: imageHeight
-					},
-					image_filters: {
-						brightness: $('#brightnessControl').val(),
-						contrast: $('#brightnessControl').val(),
-						saturation: $('#brightnessControl').val()
-					},
-					timeTaken: timeTaken
-				}),
-				success: function(data) {
-					response = JSON.parse(data);
-					showSnackBar(response.message);
-					globals.editPreviousLabels = -1;
-					globals.AnnotationsDrawn = false;
-					if (window.labelsLayer.hasChildren()) {
-						window.labelsLayer.removeChildren();
-					}
-					globals.aboveExistingLabel = false;
-					//window.labelsLayer.importJSON(JSON.parse(data));
-					//$('#noLabels').prop('checked', false);
-					getNewImage(false);
-				},
-				error: function(xhr, errmsg, err) {
-					showSnackBar(xhr.status + ": " + xhr.responseText);
-					globals.labelsDrawn = prevLabels;
-				}
-			});
-			return false;
-		});
-
-		//set initial value of chosenTool to current radio button value
-		globals.chosenTool = document.querySelector('input[name="tool_select"]:checked').value;
-
-		//adding logic to save chosen annotation tool
-		$('input[name$="tool_select"]').change(function(){
-			globals.chosenTool = $(this).val();
-		});
-
-	});
-
-	var path;
-	var types = ['point', 'handleIn', 'handleOut'];
-	function findHandle(point) {
-		if(path===null)
-			return null;
-
-		for (var i = 0, l = path.segments.length; i < l; i++) {
-			for (var j = 0; j < 3; j++) {
-				var type = types[j];
-				var segment = path.segments[i];
-				var segmentPoint = type == 'point'
-				? segment.point
-				: segment.point + segment[type];
-				var distance = (point - segmentPoint).length;
-				if (distance < 2) {
-					return {
-						type: type,
-						segment: segment
-					};
-				}
-			}
-		}
-		return null;
+	.main-content {
+		display: flex;
+		flex: 1;
+		overflow: hidden;
 	}
 
-	var currentSegment, mode, type;
-	function onMouseDown(event) {
-		//for all shape annotation tools
-		if(globals.chosenTool !== 'bezier')
-		{
-			if (!globals.aboveExistingLabel) { //Create new label
-				startPoint = event.point;
-				globals.isActive = true; //Whether the path is currently being created
-				var center = (startPoint + event.point) / 2;
-				//window.circlePath = new Path.Circle(center, startPoint.getDistance(event.point)/2);
-				globals.dragged = false; //Whether the path has been created with a click and dragged to be larger than a simgle point
-			} else {
-				dragStartPoint = event.point;
-			}
-		}
-		//for bezier
-		else {
-			if(!event.event.shiftKey) {
-				if (!globals.aboveExistingLabel) {
-					if (currentSegment)
-						currentSegment.selected = false;
-					mode = type = currentSegment = null;
-
-					if (!path)
-					{
-						path = new Path();
-						globals.isActive = true;
-						path.fillColor = {
-							hue: 360 * Math.random(),
-							saturation: 1,
-							brightness: 1,
-							alpha: 0.5
-						};
-					}
-				}
-				var result = findHandle(event.point);
-				if (result)
-				{
-					currentSegment = result.segment;
-					type = result.type;
-					if (path.segments.length > 1 && result.type == 'point' && result.segment.index == 0)
-					{
-						mode = 'close';
-						globals.isActive = false;
-						var category = $('input[name=category_select]:checked', '#categories').val();
-						var shape = globals.categoryShapes[category];
-						globals.labelsDrawn += 1;
-						globals.categoryGroups[category].addChild(path);
-						path.style = globals.categoryGroups[category].style;
-						path.opacity = 1;
-						path.closed = true;
-						path.selected = false;
-
-						path.onMouseEnter = function(event)
-						{
-							if (!globals.isActive)
-							{
-								globals.aboveExistingLabel = true;
-								this.opacity = 1;
-								window.circlePath = this;
-							}
-						};
-
-						path.onMouseLeave = function(event)
-						{
-							globals.aboveExistingLabel = false;
-							mode = null;
-							this.style = globals.categoryGroups[category].style;
-							this.opacity = globals.categoryGroups[category].opacity;
-						};
-						path.onDoubleClick = function(event)
-						{
-							globals.isActive = false;
-							globals.aboveExistingLabel = false;
-							this.remove();
-							path = null;
-							globals.labelsDrawn -= 1;
-						};
-						path = null;
-					}
-				}
-				if (mode != 'close') {
-					mode = currentSegment ? 'move' : 'add';
-					if (!currentSegment)
-					currentSegment = path.add(event.point);
-					currentSegment.selected = true;
-				}
-			}
-		}
+	.control-sidebar {
+		width: 300px;
+		padding: 15px;
+		background-color: #f8f9fa;
+		border-left: 1px solid #e9ecef;
+		overflow-y: auto;
+		display: flex;
+		flex-direction: column;
 	}
 
-	function onDelete(){
-		if(globals.chosenTool=='bezier')
-			currentSegment = path.removeSegment(path._segments.length -1);
-		else {
-			showSnackBar("Undo is currently available only for bezier curves");
-		}
-		paper.view.update();
-	}
-	$("#undo").click(onDelete);
-	$(document).keydown( function(e) {
-		if( e.which === 90 && (event.ctrlKey || event.metaKey)){
-			onDelete();
-		}
-
-	});
-
-	var ZOOM_FACTOR = 1.05;
-
-
-	// On mouse scroll...
-	$('canvas').mousewheel(function(event) {
-		// Store previous view state.
-		if(event.shiftKey){
-			var oldZoom = view.zoom;
-			var oldCenter = view.center;
-
-			// Get mouse position.
-			// It needs to be converted into project coordinates system.
-			var mousePosition = view.viewToProject(new Point(event.offsetX, event.offsetY));
-
-			// Update view zoom.
-			var newZoom = event.deltaY > 0 ?
-			  oldZoom * ZOOM_FACTOR :
-			  oldZoom / ZOOM_FACTOR;
-			view.zoom = newZoom;
-
-			// Update view position.
-			view.center += (mousePosition - oldCenter) * (1 - (oldZoom / newZoom));
-		} else {
-			return true;
-		}
-	});
-
-	$('#resetCanvasZoom').click(function() {
-		view.zoom = 1;
-		view.setCenter(globals.initialCenter);
-	});
-
-	var $window = $(window), previousScrollTop = 0, scrollLock = false;
-
-
-	function onMouseDrag(event) {
-		var category = $('input[name=category_select]:checked', '#categories').val();
-		var shape = globals.categoryShapes[category];
-		var radius = 0;
-		if(!event.event.shiftKey)
-		{
-            //handle bezier annotation tool drag event here
-            if(globals.chosenTool==='bezier')
-            {
-                if (mode == 'move' && type == 'point')
-                {
-                    currentSegment.point = event.point;
-                }
-                else if (mode != 'close')
-                {
-                    var delta = event.delta.clone();
-                    if (type == 'handleOut' || mode == 'add')
-                    delta = -delta;
-                    currentSegment.handleIn += delta;
-                    currentSegment.handleOut -= delta;
-                }
-            }
-            //handle shape tools drag events here
-            else
-            {
-                if (globals.isActive) {
-                    var center = (startPoint + event.point) / 2;
-                    if (!globals.dragged) {
-                        switch (globals.chosenTool) {
-                            case 'circle':
-                                window.circlePath = new Path.Circle(center, startPoint.getDistance(event.point) / 2);
-                                break;
-                            case 'ellipse':
-                                window.circlePath = new Path.Ellipse(startPoint, event.point);
-                                break;
-                            default:
-                                window.circlePath = new Path.Circle(center, startPoint.getDistance(event.point) / 2);
-                        }
-
-                        globals.dragged = true;
-                        globals.labelsDrawn += 1;
-                        globals.categoryGroups[category].addChild(window.circlePath);
-                        window.circlePath.style = globals.categoryGroups[category].style;
-                        window.circlePath.opacity = 1;
-                    }
-                    switch (globals.chosenTool) {
-                        case 'circle':
-                            newPath = new Path.Circle(center, startPoint.getDistance(event.point) / 2);
-                            var diameter = startPoint.getDistance(event.point);
-                            break;
-                        case 'ellipse':
-                            newPath = new Path.Ellipse(startPoint, event.point);
-                            var dist1 = Math.abs(startPoint.x - event.point.x);
-                            var dist2 = Math.abs(startPoint.y - event.point.y);
-                            var diameter = Math.max(dist1, dist2);
-                            break;
-                        default:
-                            newPath = new Path.Circle(center, startPoint.getDistance(event.point) / 2);
-                    }
-
-
-                    globals.categoryGroups[category].addChild(newPath);
-                    newPath.style = globals.categoryGroups[category].style;
-                    newPath.opacity = 1;
-
-                    newPath.onMouseEnter = function(event) {
-                        if (!globals.isActive) {
-                            globals.aboveExistingLabel = true;
-                            this.opacity = 1;
-                            window.circlePath = this;
-                        }
-                    };
-                    newPath.onMouseLeave = function(event) {
-                        globals.aboveExistingLabel = false;
-                        this.style = globals.categoryGroups[category].style;
-                        this.opacity = globals.categoryGroups[category].opacity;
-                    };
-                    newPath.onDoubleClick = function(event) {
-                        globals.isActive = false;
-                        globals.aboveExistingLabel = false;
-                        this.remove();
-                        globals.labelsDrawn -= 1;
-                    };
-                    window.circlePath.remove();
-                    window.circlePath = newPath;
-
-                } else {
-                    window.circlePath.position += event.point - dragStartPoint;
-                    dragStartPoint = event.point;
-
-                }
-            }
-		} else{
-			paper.view.center = event.downPoint.subtract(event.point).add(paper.view.center);
-		}
+	#canvasContainer {
+		flex: 1;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		background-color: #e9ecef;
+		position: relative;
+		overflow: hidden;
 	}
 
-	function onMouseUp(event) {
-		if(globals.chosenTool !== 'bezier')
-		{
-			globals.isActive = false;
-			if (!globals.dragged) {
-				globals.aboveExistingLabel = false;
-			} else {
-				window.circlePath.opacity = 0.5;
-			}
-		}
-		$("#craterDiv").toggle(false);
-	}
-	</script>
-
-	<script type="text/javascript">
-	imageX = 0;
-	imageY = 0;
-	imageWidth = 0;
-	imageHeight = 0;
-	ZOOM_STEP_SIZE =1;
-
-	var currentImage = {};
-
-	// function to set value of location data to global variable
-	function setLocationData(data)
-	{
-		globals.locationData = data;
+	#canvasDiv {
+		position: relative;
+		box-shadow: 0 2px 10px rgba(0, 0, 0, 0.2);
 	}
 
-	function startAnnotations() {
-		$('#debug').show();
-		$('#controls').show();
-		$('#displayTable').show();
-		$('#image_info').show();
-		$('#undo').show();
-		$('#applyLabels').show();
-		$('#noLabelsList').show();
-		$('#generateDataset').hide();
-		$('#selectAll').hide();
-		$('#googleColab').hide();
-		$('#user_annotations').hide();
-		$('#continueAnnotations').hide();
-		$('#generateDatasetPath').hide()
-		$('#imagemodal').modal('hide');
+	#canvas {
+		display: block;
 	}
 
-
-	function startMaskRCNN() {
-			$('#debug').hide();
-			$('#controls').hide();
-			$('#displayTable').hide();
-			$('#image_info').hide();
-			$('#undo').hide();
-			$('#applyLabels').hide();
-			$('#noLabelsList').hide();
-			$('#generateDataset').show();
-			$('#selectAll').show();
-			$('#googleColab').show();
-			$('#user_annotations').show();
-			$('#continueAnnotations').show();
-			$('#generateDatasetPath').show()
-
-			$.ajax({
-				url: "/webclient/displayAnnotations",
-				type: "GET",
-				dataType: "json",
-				data: {},
-				success: function(response) {
-					if (response.status == "success") {
-						$("#annotation_grid_body").empty();
-						$("#annotation_grid_head").empty();
-						$("#annotation_grid_head").append(`<tr>
-							<th><input type="checkbox"></th>
-							<th>File Name</th>
-							<th>Labeler</th>
-							<th>Width</th>
-							<th>Height</th>
-							<th>Cropped X coordinate</th>
-							<th>Cropped Y coordinate</th>
-							<th>Time Taken</th>
-							<th>Label Count</th>
-							<th>Display</th>
-						</tr>`)
-						var content = response.message;
-						for (const property in content) {
-							$("#annotation_grid_body").append(`<tr data-row-id="${property}">
-							<td><input type="checkbox" id="${property}_input" class="sub_chk" data-id="${property}"></td>
-							<td id="${property}_parent_image">${content[property]["parent_image"]}</td>
-							<td id="${property}_labeler">${content[property]["labeler"]}</td>
-							<td id="${property}_width">${content[property]["width"]}</td>
-							<td id="${property}_height">${content[property]["height"]}</td>
-							<td id="${property}_padding_x">${content[property]["padding_x"]}</td>
-							<td id="${property}_padding_y">${content[property]["padding_y"]}</td>
-							<td id="${property}_timetaken">${content[property]["timetaken"]}</td>
-							<td id="${property}_labelcount">${content[property]["labelcount"]}</td>
-							<td id="${property}_number">
-								<a href="javascript:;" class="pop" onClick="modalShow(this)" data-src="${content[property]["number"]}" src="/webclient/get_overlayed_combined_gif/${content[property]["number"]}">Display and Edit</a>
-							</td>
-							</tr>`)
-						}
-					} else {
-						alert(response.message);
-						$('#debug').show();
-						$('#controls').show();
-						$('#displayTable').show();
-						$('#image_info').show();
-						$('#undo').show();
-						$('#applyLabels').show();
-						$('#noLabelsList').show();
-						$('#generateDataset').hide();
-						$('#selectAll').hide();
-						$('#googleColab').hide();
-						$('#user_annotations').hide();
-						$('#continueAnnotations').hide();
-						$('#generateDatasetPath').hide()
-					}
-				},
-				error: function(xhr, errmsg, err) {
-					console.log("Access to annotations failed");
-					$('#debug').show();
-					$('#controls').show();
-					$('#displayTable').show();
-					$('#image_info').show();
-					$('#undo').show();
-					$('#applyLabels').show();
-					$('#noLabelsList').show();
-					$('#generateDataset').hide();
-					$('#selectAll').hide();
-					$('#googleColab').hide();
-					$('#user_annotations').hide();
-					$('#continueAnnotations').hide();
-					$('#generateDatasetPath').hide()
-				}
-			});
-	};
-
-	function selectModel() {
-			$('#debug').hide();
-			$('#controls').hide();
-			$('#displayTable').hide();
-			$('#image_info').hide();
-			$('#undo').hide();
-			$('#applyLabels').hide();
-			$('#noLabelsList').hide();
-			$('#user_annotations').show();
-			$('#continueAnnotations').show();
-			$('#generateDatasetPath').show()
-
-			$.ajax({
-				url: "/webclient/displayModels",
-				type: "GET",
-				dataType: "json",
-				data: {},
-				success: function(response) {
-					if (response.status == "success") {
-						$("#annotation_grid_body").empty();
-						$("#annotation_grid_head").empty();
-						$("#annotation_grid_head").append(`<tr>
-							<th>File Name</th>
-							<th>Select Model</th>
-						</tr>`)
-						var content = response.message;
-						for (const property in content) {
-							$("#annotation_grid_body").append(`<tr data-row-id="${property}">
-							<td id="${property}_parent_image">${content[property]["file_name"]}</td>
-							<td id="${property}_number">
-								<a href="javascript:;" class="pop" onClick="selectModelOption(this)" src="${content[property]["file_name"]}">Select</a>
-							</td>
-							</tr>`)
-						}
-					} else {
-						alert(response.message);
-						$('#debug').show();
-						$('#controls').show();
-						$('#displayTable').show();
-						$('#image_info').show();
-						$('#undo').show();
-						$('#applyLabels').show();
-						$('#noLabelsList').show();
-						$('#user_annotations').hide();
-						$('#continueAnnotations').hide();
-						$('#generateDatasetPath').hide()
-					}
-				},
-				error: function(xhr, errmsg, err) {
-					console.log("Access to annotations failed");
-					$('#debug').show();
-					$('#controls').show();
-					$('#displayTable').show();
-					$('#image_info').show();
-					$('#undo').show();
-					$('#applyLabels').show();
-					$('#noLabelsList').show();
-					$('#user_annotations').hide();
-					$('#continueAnnotations').hide();
-					$('#generateDatasetPath').hide()
-				}
-			});
-	};
-
-
-	function generateDataset() {
-		$("#generateDatasetSpinner").show();
-		$("#generateDatasetPath").empty();
-		var selected = [];
-		$('#annotation_grid_body > tr').each(function(index, tr) {
-			index = index + 1;
-			if($("#" + index.toString() + "_input").prop("checked") == true) {
-				selected.push({ parent_image: $("#" + index.toString() + "_parent_image").text(),
-				 				width: $("#" + index.toString() + "_width").text(),
-				 				height: $("#" + index.toString() + "_height").text(),
-				 				padding_x: $("#" + index.toString() + "_padding_x").text(),
-				 				padding_y: $("#" + index.toString() + "_padding_y").text(),
-				 				timetaken: $("#" + index.toString() + "_timetaken").text(),
-				 				user: $("#" + index.toString() + "_labeler").text(),
-				 				})
-			}
-		});
-		var location = document.location.origin;
-		$.ajax({
-			url: "/webclient/createMasks",
-			type: "POST",
-			dataType: "json",
-			data: JSON.stringify({"labels" : selected}),
-			success: function(response) {
-				if (response.status == "success") {
-					var link = response.message;
-					link = link.replace("/app", location);
-					$("#generateDatasetSpinner").hide();
-					$("#generateDatasetPath").empty();
-					$('#generateDatasetPath').text(link);
-				} else {
-					console.log("Generate dataset failed!");
-					showSnackBar(response.message);
-				}
-			}
-		});
-	}
-	function zoomIn(){
-		labelsLayer.view.zoom = labelsLayer.view.zoom + ZOOM_STEP_SIZE;
+	.footer-bar {
+		padding: 10px 15px;
+		background-color: #f8f9fa;
+		border-top: 1px solid #e9ecef;
+		display: flex;
+		justify-content: space-between;
+		align-items: center;
+		height: 60px;
 	}
 
-	function zoomOut(){
-		labelsLayer.view.zoom = labelsLayer.view.zoom - ZOOM_STEP_SIZE;
+	.tool-buttons {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 8px;
+		margin-bottom: 15px;
 	}
 
-	function panUp(){
-        labelsLayer.view.setCenter(labelsLayer.view.center.x, labelsLayer.view.center.y - globals.panStep);
-	}
-	function panDown(){
-        labelsLayer.view.setCenter(labelsLayer.view.center.x, labelsLayer.view.center.y + globals.panStep);
-	}
-	function panRight(){
-        labelsLayer.view.setCenter(labelsLayer.view.center.x + globals.panStep, labelsLayer.view.center.y);
-	}
-	function panLeft(){
-        labelsLayer.view.setCenter(labelsLayer.view.center.x - globals.panStep, labelsLayer.view.center.y);
+	.tool-buttons button {
+		flex: 1 0 auto;
+		min-width: 95px;
 	}
 
-	function getAnnotations() {
-		$.ajax({
-			url: "/webclient/getAnnotations/",
-			type: "GET",
-			dataType: "json",
-			data: {
-				image_name: currentImage.path + currentImage.image_name,
-				x: imageX,
-				y: imageY,
-				width: imageWidth,
-				height: imageHeight,
-			},
-			success: function(response) {
-				if(response.status == "failure") {
-					showSnackBar(response.message);
-				} else {
-					globals.Annotations = response.message;
-					drawAnnotations();
-				}
-			},
-			error: function(xhr, errmsg, err) {
-				alert(xhr.status + ": " + xhr.responseText);
-			}
-		});
+	#categories_coll {
+		list-style: none;
+		padding: 0;
+		margin: 0 0 15px 0;
+		overflow-y: auto;
 	}
 
-	// function to draw LOLA Annotations on the canvas
-	function drawAnnotations()
-	{
-		if(globals.AnnotationsDrawn == false)
-		{
-			globals.AnnotationsDrawn = true;
-			for(i = 0; i < globals.Annotations.length; i++)
-			{
-				var pathData = globals.Annotations[i][0];
-				window.circlePath = new paper.Path(pathData);
-				var category = globals.Annotations[i][1];
-				globals.labelsDrawn += 1;
-				globals.categoryGroups[category].addChild(window.circlePath);
-				window.circlePath.style = globals.categoryGroups[category].style;
-				console.log(window.circlePath.style);
-				window.circlePath.opacity = globals.categoryGroups[category].opacity;
-				globals.isActive = false;
-
-				window.circlePath.onMouseEnter = function(event)
-				{
-					if (!globals.isActive)
-					{
-						globals.aboveExistingLabel = true;
-						this.opacity = 1;
-						window.circlePath = this;
-					}
-				};
-
-				window.circlePath.onMouseLeave = function(event)
-				{
-					globals.aboveExistingLabel = false;
-					mode = null;
-					this.opacity = globals.categoryGroups[category].opacity;
-				};
-
-				window.circlePath.onDoubleClick = function(event)
-				{
-					globals.isActive = false;
-					globals.aboveExistingLabel = false;
-					this.remove();
-					path = null;
-					globals.labelsDrawn -= 1;
-				};
-			}
-			if(data.length==1)
-				showSnackBar(globals.Annotations.length + " Annotation was added");
-			else
-				showSnackBar(globals.Annotations.length + " Annotations were added");
-		} else {
-			if(globals.Annotations.length==0)
-				showSnackBar("No Annotations were found");
-			else
-				showSnackBar("Annotations were already added");
-		}
+	#categories_coll li {
+		padding: 8px 10px;
+		margin-bottom: 5px;
+		background-color: #fff;
+		border-radius: 4px;
+		border: 1px solid #ddd;
+		display: flex;
+		align-items: center;
 	}
 
-
-	// function to calculate pixel point from latlon
-	function getPointFromLatLon(lat, lon)
-	{
-		var y = Math.abs(996*(lat - globals.locationData.UpperLeft.Latitude)/(globals.locationData.LowerRight.Latitude - globals.locationData.UpperLeft.Latitude));
-		var x = Math.abs(996*(lon - globals.locationData.UpperLeft.Longitude)/(globals.locationData.LowerRight.Longitude - globals.locationData.UpperLeft.Longitude));
-		return new paper.Point(x,y);
+	#categories_coll .circle {
+		width: 15px;
+		height: 15px;
+		border-radius: 50%;
+		margin-left: auto;
 	}
 
-	//function to show a snackbar
-	function showSnackBar(text) {
-		var snackBar = document.getElementById("snackbar");
-		snackBar.innerHTML = text;
-		// Add the "show" class to DIV
-		snackBar.className = "show";
-		// After 3 seconds, remove the show class from DIV
-		setTimeout(function(){ snackBar.className = snackBar.className.replace("show", ""); }, 3000);
+	.coordinate-display {
+		font-size: 12px;
+		color: #555;
 	}
 
-	function getNewImage(refresh) {
-		startTime = Date.now();
-		if (!window.labelsLayer) {
-			window.labelsLayer = new paper.Layer();
-		} else {
-			original_image_raster.remove();
-			globals.raster.remove();
-		}
-		//selectedImage = JSON.parse($('#imageCombo').val());
-		$.ajax({
-			url: "/webclient/getNewImage",
-			type: "GET",
-			dataType: "json",
-			data: {},
-			success: function(response) {
-
-				//handle metadata
-				var image_metadata = response.metadata;
-				if(image_metadata)
-				{
-					setLocationData(image_metadata);
-				}
-
-				data = response.labels;
-				if (data) {
-					displayLabels(response.labels);
-				}
-				imageX = response.subimage.x;
-				imageY = response.subimage.y;
-				imageWidth = response.subimage.width;
-
-				imageHeight = response.subimage.height;
-				imagePadding = response.subimage.padding;
-
-				if (typeof padding == 'undefined') {
-					padding = 0;
-				}
-				displayImage(response.image_name, response.path, response.categories, response.shapes, response.colors,
-					new paper.Point(response.subimage.x, response.subimage.y),
-					imageWidth, imageHeight, imagePadding);
-				currentImage = response;
-			},
-			error: function(xhr, errmsg, err) {
-					alert(xhr.status + ": " + xhr.responseText);
-			}
-		});
+	.nav-buttons {
+		display: flex;
+		gap: 10px;
 	}
 
-	//TODO: Input validation and error checking
-	function displayImage(image_name, image_path, categories, shapes, colors, point, width, height, padding) {
-		if (width <= 0 || height <= 0 || padding < 0) {
-			alert("Problem with width, height, or padding value");
-			return;
-		}
-		padding = 0;
-		size = new paper.Size(width + 2 * padding, height + 2 * padding);
-		//Add new image and resize canvas to fit image
-		img = new Image();
-		img.onload = function() {
-			if (!img.complete || img.naturalWidth == 0) {
-				alert("Could not load image");
-				return;
-			}
-			if (point.x + width + padding > img.naturalWidth || point.y + height + padding > img.naturalHeight) {
-				alert("Window out of bounds of image.");
-				return;
-			}
-		};
-		img.crossOrigin = "Anonymous";
-		try {
-			img.src = image_path + image_name;
-		} catch (err) {
-			alert("Image cannot be opened. Note that currently external URLs cannot be used. Error: " + err.message)
-		}
-
-		function setup_images() {
-			//paper.view.setViewSize(img.naturalWidth, img.naturalHeight);
-			paper.view.setViewSize(size);
-			//paper.view.getViewSize();
-
-			$('#canvas').css('width', size.width).css('height', size.height);
-			point = new paper.Point(point.x, point.y);
-			$('#canvasWrapper').css('width', size.width).css('height', size.height);
-			$('#canvasDiv').css('width', size.width).css('height', size.height);
-			/////$('#canvas').css('box-shadow', " -20 -20 20px" +  imagePadding + "px rgba(255,0,0,0.5)");
-			///point = new paper.Point(point.x - padding, point.y - padding);
-			original_image_raster = new paper.Raster(img);
-			original_image_raster.id = "original image";
-			globals.raster = original_image_raster.getSubRaster(new paper.Rectangle(point, size));
-			globals.raster.position = paper.view.center;
-			original_image_raster.sendToBack();
-			globals.raster.sendToBack();
-			original_image_raster.visible = false;
-			globals.raster.id = "shifted image";
-			paper.view.update();
-			globals.initialCenter = paper.view.center;
-		}
-		if (img.complete) {
-			setup_images();
-		} else {
-			img.addEventListener('load', setup_images);
-			img.addEventListener('error', function() {
-				alert('Error loading image');
-			})
-		}
-
-		//Category selection setup
-		var output = [];
-		$('#categories_coll')[0].html = '';
-		$.each(categories, function(i, val) {
-			cat_list_item = '<li class="grid">' +
-			'<input type="radio" name="category_select" value="' + val + '" id="'+ val +'">' +
-			'<label for="' + val + '">'+ val + '</label>'+
-			'<span class="circle" style="color:' + colors[i] + '; background-color:' + colors[i] +
-			';"></span></li>';
-
-			output.push(cat_list_item);
-		});
-		$('#categories_coll').html(output.join(''));
-		$("input:radio[name=category_select]:first").attr('checked', true);
-
-		$('#image_name').html("Image name: " + image_name);
-		$('#image_info_name').html("Image: " + image_path + image_name);
-		globals.create_groups_shapes(categories, colors, shapes);
-
-	}
-	//TODO: Make work for both JSON string and JSON object
-	function displayLabels(labels) {
-		//window.labelsLayer.importJSON(JSON.parse(data));
+	/* Measurement tools */
+	.measurement-info {
+		position: absolute;
+		z-index: 100;
+		background: rgba(255, 255, 255, 0.8);
+		border: 1px solid #ddd;
+		padding: 5px 10px;
+		border-radius: 4px;
+		font-size: 12px;
+		display: none;
 	}
 
-	function modalShow(elem) {
-		var location = $(elem).attr('src') + "?timestamp=" + new Date().getTime();
-		$('.imagepreview').removeAttr("src").attr('src', location);
-		$('#editbutton').attr('data-src', $(elem).attr('data-src'));
-		$('#imagemodal').modal('show');
+	/* Add CSS for loading indicator */
+	.overlay {
+		position: absolute;
+		top: 0;
+		left: 0;
+		width: 100%;
+		height: 100%;
+		display: flex;
+		justify-content: center;
+		align-items: center;
+		background-color: rgba(0, 0, 0, 0.5);
+		z-index: 9999;
+	}
+	
+	.loading-spinner {
+		width: 50px;
+		height: 50px;
+		border: 5px solid rgba(255, 255, 255, 0.3);
+		border-radius: 50%;
+		border-top-color: #fff;
+		animation: spin 1s ease-in-out infinite;
+	}
+	
+	@keyframes spin {
+		to { transform: rotate(360deg); }
+	}
+	
+	.toast-container {
+		position: fixed;
+		top: 20px;
+		right: 20px;
+		z-index: 10000;
+	}
+	
+	.toast {
+		background-color: #f8d7da;
+		color: #721c24;
+		padding: 15px 25px;
+		border-radius: 4px;
+		margin-bottom: 10px;
+		box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+		display: flex;
+		justify-content: space-between;
+		max-width: 350px;
+	}
+	
+	.toast-close {
+		background: none;
+		border: none;
+		color: #721c24;
+		font-size: 20px;
+		cursor: pointer;
 	}
 
-	function editImage(elem) {
-		id = $(elem).attr('data-src');
-		$.ajax({
-			url: "/webclient/editImageLabel",
-			type: "GET",
-			dataType: "json",
-			data: {"image_id" : id},
-			success: function(response) {
-				if (response.status == "success") {
-					globals.labelsDrawn = 0;
-					labelsLayer.clear();
-					labelsLayer.view.zoom = 1;
-					labelsLayer.view.setCenter(globals.initialCenter);
-					globals.AnnotationsDrawn = false;
-					if (window.labelsLayer.hasChildren()) {
-						window.labelsLayer.removeChildren();
-					}
-					globals.aboveExistingLabel = false;
-					startTime = Date.now();
-
-					if (!window.labelsLayer) {
-						window.labelsLayer = new paper.Layer();
-					} else {
-						original_image_raster.remove();
-						globals.raster.remove();
-					}
-
-					var image_metadata = response.metadata;
-					if(image_metadata)
-					{
-						setLocationData(image_metadata);
-					}
-
-					data = response.labels;
-					if (data) {
-						displayLabels(response.labels);
-					}
-					imageX = response.subimage.x;
-					imageY = response.subimage.y;
-					imageWidth = response.subimage.width;
-					imageHeight = response.subimage.height;
-					imagePadding = response.subimage.padding;
-
-					if (typeof padding == 'undefined') {
-						padding = 0;
-					}
-					displayImage(response.image_name, response.path, response.categories,
-								response.shapes, response.colors,
-								new paper.Point(response.subimage.x, response.subimage.y), imageWidth, imageHeight, imagePadding);
-					currentImage = response;
-					drawn_labels = response.drawn_labels;
-					for(i = 0; i < drawn_labels.length; i++) {
-						var pathData = drawn_labels[i][0];
-						if (drawn_labels[i][2] == "circle") {
-							x = (pathData["cx"]);
-							y = parseFloat(pathData["cy"]);
-							radius = parseFloat(pathData["radius"]);
-							window.circlePath = new paper.Path.Circle(new paper.Point(x, y), radius);
-						} else if (drawn_labels[i][2] == "ellipse") {
-							x = (pathData["cx"]);
-							y = parseFloat(pathData["cy"]);
-							rx = parseFloat(pathData["rx"]);
-							ry = parseFloat(pathData["ry"]);
-							window.circlePath = new paper.Path.Ellipse({
-													center: [x, y],
-													radius: [rx, ry]
-												});
-						} else {
-							window.circlePath = new paper.Path(pathData);
-						}
-						var category = drawn_labels[i][1];
-						globals.labelsDrawn += 1;
-						globals.categoryGroups[category].addChild(window.circlePath);
-						window.circlePath.style = globals.categoryGroups[category].style;
-						window.circlePath.opacity = globals.categoryGroups[category].opacity;
-
-						window.circlePath.onMouseEnter = function(event)
-						{
-							if (!globals.isActive)
-							{
-								globals.aboveExistingLabel = true;
-								this.opacity = 1;
-								window.circlePath = this;
-							}
-						};
-
-						window.circlePath.onMouseLeave = function(event)
-						{
-							globals.aboveExistingLabel = false;
-							mode = null;
-							this.opacity = globals.categoryGroups[category].opacity;
-						};
-
-						window.circlePath.onDoubleClick = function(event)
-						{
-							globals.isActive = false;
-							globals.aboveExistingLabel = false;
-							this.remove();
-							path = null;
-							globals.labelsDrawn -= 1;
-						};
-					}
-					showSnackBar(response.message);
-					startAnnotations();
-					globals.editPreviousLabels = id;
-				} else {
-					showSnackBar("Edit Image failed!");
-				}
-			}
-		});
+	/* Loader overlay and spinner CSS */
+	#loading-overlay {
+		position: fixed;
+		top: 0;
+		left: 0;
+		width: 100%;
+		height: 100%;
+		background-color: rgba(0, 0, 0, 0.5);
+		display: flex;
+		justify-content: center;
+		align-items: center;
+		z-index: 9999;
 	}
 
-	function selectModelOption(elem) {
-		console.log($(elem).attr('src'));
-		$.ajax({
-			url: "/webclient/selectModels",
-			type: "POST",
-			dataType: "json",
-			data: JSON.stringify({"model_id" : $(elem).attr('src')}),
-			success: function(response) {
-				if (response.status == "success") {
-					showSnackBar(response.message);
-				} else {
-					console.log("Model selection failed!");
-				}
-			}
-		});
+	#canvasDiv.loading {
+		position: relative;
 	}
 
-	$('document').ready(function() {
+	.loading-spinner {
+		position: absolute;
+		top: 50%;
+		left: 50%;
+		transform: translate(-50%, -50%);
+		z-index: 1000;
+	}
 
-		//Canvas Controls
-		$('#brightnessControl').on('input', function() {
-			var brightness = $('#brightnessControl').val();
-			$('span#brightness').html(brightness);
-			cssText = 'brightness(' + $('#brightnessControl').val() + ')' + 'contrast(' + $('#contrastControl').val() + ')' + 'saturate(' + $('#saturationControl').val() + ')';
-			$('#canvas').css('-webkit-filter', cssText).css('filter', cssText);
-		});
-		$('#contrastControl').on('input', function() {
-			var contrast = $('#contrastControl').val();
-			cssText = 'brightness(' + $('#brightnessControl').val() + ')' + 'contrast(' + $('#contrastControl').val() + ')' + 'saturate(' + $('#saturationControl').val() + ')';
-			$('span#contrast').html($('#contrastControl').val());
-			$('#canvas').css('-webkit-filter', cssText).css('filter', cssText);
-		});
-		$('#saturationControl').on('input', function() {
-			var saturation = $('#saturationControl').val();
-			cssText = 'brightness(' + $('#brightnessControl').val() + ')' + 'contrast(' + $('#contrastControl').val() + ')' + 'saturate(' + $('#saturationControl').val() + ')';
-			$('span#saturation').html($('#saturationControl').val());
-			$('#canvas').css('-webkit-filter', cssText).css('filter', cssText);
-		});
+	@keyframes spin {
+		0% { transform: rotate(0deg); }
+		100% { transform: rotate(360deg); }
+	}
 
-		$('#resetImageControl').on('click', function() {
-			$('#brightnessControl').val("1").trigger('input');
-			$('#contrastControl').val("1").trigger('input');
-			$('#saturationControl').val("1").trigger('input');
-		});
-		$('#imagemodal').on('hide.bs.modal', function (e) {
-			$('.imagepreview').attr('src', "");
-		});
-	});
-	</script>
+	.spinner-border {
+		display: inline-block;
+		width: 3rem;
+		height: 3rem;
+		vertical-align: text-bottom;
+		border: 0.25em solid rgba(255, 255, 255, 0.5);
+		border-right-color: #fff;
+		border-radius: 50%;
+		animation: spin .75s linear infinite;
+	}
 
-</head>
+	.sr-only {
+		position: absolute;
+		width: 1px;
+		height: 1px;
+		padding: 0;
+		margin: -1px;
+		overflow: hidden;
+		clip: rect(0, 0, 0, 0);
+		white-space: nowrap;
+		border: 0;
+	}
 
-<body onload="getNewImage()" bgcolor="#c0c0c0">
-	<div id="wrapper"  class="toggled">
-		<!-- Sidebar -->
-		<div id="sidebar-wrapper">
-			<ul class="sidebar-nav">
-				<li class="sidebar-brand">
-					<a href="#" style="font-size: 150%; text-align: center;">
-						deepgis.org
-					</a>
-				</li>
+	/* Notification styling */
+	#notification-container {
+		position: fixed;
+		top: 20px;
+		right: 20px;
+		z-index: 9999;
+		max-width: 350px;
+	}
 
-				<li data-toggle="collapse" data-target="#categories" class="collapsed active">
-					<p class="bold"><i class="fa fa-list-ul" aria-hidden="true"></i> Categories <span class="arrow"></span></p>
-				</li>
-				<form action="" class="sub-menu collapse show" id="categories">
-					<ul class="sidebar-nav2 sub-menu collapse show" id="categories_coll">
-					</ul>
-					<div style="margin-top: 5px; display: inline-grid; grid-template-rows: 50% 50%; width: 100%; justify-items:center;">
-						<input class="form-control form-control-sm " style="width: 85%;margin-bottom: 10px;" id="add_new_category" placeholder="Add a new category">
-						<button type="button" title="Add a new category for labels" id="category_submit" style="width:40%;" class="btn btn-primary btn-sm"><i class="fa fa-plus"></i>Add category</button>
-					</div>
-				</form>
+	.notification {
+		padding: 15px;
+		margin-bottom: 10px;
+		border-radius: 4px;
+		box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+		animation: slide-in 0.5s ease-out;
+		color: white;
+	}
 
-				<li data-toggle="collapse" data-target="#tools_coll" class="collapsed active">
-					<p class="bold"><i class="fa fa-cog" aria-hidden="true"></i> Annotation tools <span class="arrow"></span></p>
-				</li>
-				<ul class="sidebar-nav2 sub-menu collapse show" id="tools_coll">
-					<li class="grid">
-						<input type="radio" id="circle_rb" name="tool_select" value="circle" checked="true">
-						<label for="circle_rb">
-							Circle
-						</label>
-					</li>
-					<li class="grid">
-						<input type="radio" id="ellipse_rb" name="tool_select" value="ellipse">
-						<label for="ellipse_rb">
-							Ellipse
-						</label>
-					</li>
-					<li class="grid">
-						<input type="radio" id="bezier_rb" name="tool_select" value="bezier">
-						<label for="bezier_rb">
-							Bezier
-						</label>
-					</li>
-				</ul>
+	.notification.error {
+		background-color: #dc3545;
+	}
 
-			<li data-toggle="collapse" data-target="#image_ops" class="collapsed active">
-				<p class="bold"><i class="fa fa-adjust bold" aria-hidden="true"></i> Image Filter<span class="arrow"></span></p>
-			</li>
-			<ul class="sidebar-nav2 sub-menu collapse" id="image_ops">
-				<li>
-					<p><label id="brightnessLabel" style=" margin-bottom: 0px; ">Brightness:</label> <span id="brightness">1</span></p>
-				</li>
-				<li>
-					<input type="range" min="1" max="10" step="0.1" value="1" id="brightnessControl" style="margin-left: 10%;" />
-				</li>
-				<li>
-					<p><label id="contrastLabel" style=" margin-bottom: 0px; ">Contrast:</label> <span id="contrast">1</span></p>
-				</li>
-				<li>
-					<input type="range" min="1" max="3" step="0.1" value="1" id="contrastControl" style="margin-left: 10%;" />
-				</li>
-				<li>
-					<p><label id="saturationLabel" style=" margin-bottom: 0px; ">Saturation:</label> <span id="saturation">1</span></p>
-				</li>
-				<li>
-					<input type="range" min="1" max="5" step="0.1" value="1" id="saturationControl" style="margin-left: 10%;" />
-				</li>
-				<button type="button" title="reset all image filters" id="resetImageControl" class="btn btn-warning btn-sm"><i class="fa fa-refresh"></i>Reset</button>
-			</ul>
-			<li data-toggle="collapse" data-target="#image_predictions" class="collapsed active">
-				<p class="bold"><i class="fa fa-adjust bold" aria-hidden="true"></i> Predict using AI<span class="arrow"></span></p>
-			</li>
-			<ul class="sidebar-nav2 sub-menu collapse show" id="image_predictions">
-				<li>
-					<button type="button" id="getAnnotationsButton" class="btn btn-success btn-sm" onclick="getAnnotations()" title="AI predictions">AI Predictions</button>
-				</li>
-				<li>
-					<button type="button" id="selectModel" class="btn btn-outline-primary btn-sm" onclick="selectModel()" title="Select Model"><i class="fa fa-tags"></i>Select Model</button>
-				</li>
-			</ul>
-			<li data-toggle="collapse" data-target="#deep_learning_zoo" class="collapsed active">
-				<p class="bold"><i class="fa fa-graduation-cap bold" aria-hidden="true"></i>Deep Learning Zoo<span class="arrow"></span></p>
-			</li>
-			<ul class="sidebar-nav2 sub-menu collapse show" id="deep_learning_zoo">
-				<li>
-					<button id="maskRCNN" title="Mask RCNN" type="button" onclick="startMaskRCNN()" class="btn btn-outline-primary btn-sm">Mask RCNN</button>
-				</li>
-			</ul>
-			<li id="noLabelsList">
-				<p><label><input type="checkbox" id="noLabels" />No annotations in the image</label></p>
-			</li>
-			<button type="button" title="Undo previous action" id="undo" class="btn btn-danger btn-sm">
-				<i class="fa fa-undo"></i>Undo
-			</button>
-			<button id="applyLabels" title="Submit your labels" type="button"
-			class="btn btn-success btn-sm">
-				<i class="fa fa-check"></i>Submit Labels
-			</button>
-			<button id="continueAnnotations" title="Back to Annotations"
-			type="button" class="btn btn-success btn-sm" style="display: none;" onclick="startAnnotations()">
-				<i class="fa fa-send"></i>Continue Annotations</button>
-		</ul>
-	</div>
-	<!-- /#sidebar-wrapper -->
+	.notification.success {
+		background-color: #28a745;
+	}
 
-	<!-- Page Content -->
-	<div id="page-content-wrapper">
-		<div id="main">
-			<!--<div id="toolbars">
-			<select id="imageCombo"  onchange="onImageFormChange()">
-			{#% for image in latest_image_list %#}
-			{#% ifequal image selected_image %#}
-			<option value='{"image_name": "{#  #}{image.name}}", "path": "{#  #}{ image.path }}"}' selected="selected">{#  #}{image.name}}</option>
-			{#% else %#}
-			<option value='{"image_name": "{#  #}{image.name}}", "path": "{#  #}{ image.path }}"}'>{#  #}{image.name}}</option>
-			{#% endifequal %#}
-			{#% endfor %#}
-		</select>
-	</div> -->
-	<div id="controls">
-		<div id="tips">
-			<p> <h3>Instructions</h3>
-				<ul class="list-group">
-					<li class="list-group-item">
-						Use your best guess to annotate interesting features! <br/>
-						Click and drag to select region using circle and ellipse tool. <br/>
-						Use Bezier tool to put points across interesting features. <br/>
-						Undo button or Ctrl+z/Cmd+z removes previously added Bezier point.<br/>
-						Double click to delete an already annotated area.<br/>
-						Use shift + mouse scroll to zoom inside the image. <br/>
-						Use shift + mouse drag to move the image. <br/>
-						Click <a href="javascript:void(0)" id="resetCanvasZoom">Reset</a> to default zoom.
- 						</li>
-					</ul>
-				</p>
+	.notification.warning {
+		background-color: #ffc107;
+		color: #212529;
+	}
+
+	.notification .close-btn {
+		float: right;
+		font-weight: bold;
+		font-size: 20px;
+		line-height: 20px;
+		cursor: pointer;
+		transition: 0.3s;
+	}
+
+	.notification .close-btn:hover {
+		color: black;
+	}
+
+	@keyframes slide-in {
+		from { transform: translateX(100%); opacity: 0; }
+		to { transform: translateX(0); opacity: 1; }
+	}
+
+	@keyframes fade-out {
+		from { opacity: 1; }
+		to { opacity: 0; }
+	}
+</style>
+
+<div class="wrapper">
+	<div class="main-content">
+		<!-- Canvas Container -->
+		<div id="canvasContainer">
+			<div id="canvasDiv">
+				<canvas id="canvas" resize></canvas>
+				<div id="measurementInfo" class="measurement-info"></div>
 			</div>
 		</div>
-		<table id="displayTable">
-			<tr>
-				<td>
-					<div id="canvasDiv">
-						<div id="canvasWrapper">
-							<canvas id="canvas"></canvas>
-						</div>
-					</div>
-				</td>
-			</tr>
-		</table>
-		<div class="footer">
-			<div class="gpsDiv" id="gpsDiv">
-				<div class="gpsLat" id="gpsLat"></div>
-				<div class="gpsLon" id="gpsLon"></div>
-			</div>
-		</div>
-		<div id="image_info">
-			<div class="scaleText" id="scaleText"></div>
-			<p id="image_info_name"></p>
-			<!-- <p id="image_info_path"></p> -->
-		</div>
-		<a href="/webclient/map_label" class="btn btn-success" style="position: absolute;top: 10px;right: 200px;"><i class="fa fa-sign-out"></i>Map Label</a>
-		<a href="/logout" class="btn btn-danger logoutBtn"><i class="fa fa-sign-out"></i>Logout </a>
 
-		<div id="snackbar"></div>
-			<div id="user_annotations" style="display: none;">
-				<h3>Annotations</h3>
-				<br>
-				<br>
-				<table id="annotation_grid" class="table table-sm table-hover table-striped bootgrid-table" cellspacing="0">
-					<thead id="annotation_grid_head">
-						<tr>
-							<th></th>
-							<th>File Name</th>
-							<th>Labeler</th>
-							<th>Width</th>
-							<th>Height</th>
-							<th>Cropped X coordinate</th>
-							<th>Cropped Y coordinate</th>
-							<th>Time Taken</th>
-							<th>Display</th>
-						</tr>
-					</thead>
-					<tbody id="annotation_grid_body">
-					</tbody>
-				</table>
-			</div>
-			<div>
-				<button id="selectAll" style="display: none;" class="btn"><i class="glyphicon glyphicon-ok">Select All</i></button>
-				<br>
-				<button id="generateDataset" title="generateDataset for MaskRCNN training"
-				type="button" class="btn btn-success btn-sm pull-left" style="display: none;" onclick="generateDataset()">
-					<span class="spinner-border spinner-border-sm" id="generateDatasetSpinner" role="status" aria-hidden="true" style="display: none;"></span>
-					Generate Dataset</button>
-				<br>
-				<label id="generateDatasetPath"  style="display: none;padding-left: 10px;"></label>
-
-				<a class="pull-right" style="display: none;" id="googleColab" href="https://colab.research.google.com/github/DREAMS-lab/DeepGIS_deeplearning_zoo/blob/master/Mask_RCNN_training_in_DeepGIS.ipynb">
-				  <img src="https://colab.research.google.com/assets/colab-badge.svg" style="height: 35px;" alt="Open MaskRCNN In Colab"/>
-				</a>
-			</div>
-			<div class="modal fade" id="imagemodal" tabindex="-1" role="dialog" aria-labelledby="myModalLabel" aria-hidden="true">
-			  <div class="modal-dialog" style="max-width: 600px;">
-				<div class="modal-content">
-				  <div class="modal-header">
-				  </div>
-				  <div class="modal-body">
-					<img src="" class="imagepreview" style="width: 100%;" >
-				  </div>
-				  <div class="modal-footer">
-					  <p>Clicking edit option will <span style='color: #FF0000;'>remove</span> existing annotations and load this annotation. To save, please submit the labels.</p>
-					  <button type="button" onClick="editImage(this)" data-src="" class="btn btn-warning" id="editbutton" data-dismiss="modal">Edit</button>
-					  <button type="button" class="btn btn-default" data-dismiss="modal">Close</button>
-				  </div>
+		<!-- Right Sidebar -->
+		<div class="control-sidebar">
+			<h5>Image Information</h5>
+			<div class="card mb-3">
+				<div class="card-body p-2">
+					<p id="image_info_name" class="mb-1 small">Image: </p>
+					<p id="image_info_dimensions" class="mb-1 small">Dimensions: </p>
+					<p id="imageMetadata" class="mb-0 small">No image loaded</p>
 				</div>
-			  </div>
 			</div>
-	</div>
-		<br><br>
-		<div style="text-align: left;">
-			<p>To report bugs, go to the github page <a href="https://github.com/dreams-lab/deepgis/issues" target="_blank">here</a> and open a new issue</p>
+
+			<h5>Tools</h5>
+			<div class="tool-buttons">
+				<button class="btn btn-sm btn-outline-primary" id="pen_button">Pen</button>
+				<button class="btn btn-sm btn-outline-primary" id="polygon_button">Polygon</button>
+				<button class="btn btn-sm btn-outline-primary" id="rectangle_button">Rectangle</button>
+				<button class="btn btn-sm btn-outline-primary" id="circle_button">Circle</button>
+				<button class="btn btn-sm btn-outline-primary" id="measure_button">Measure</button>
+				<button class="btn btn-sm btn-outline-danger" id="remove_button">Remove</button>
+				<button class="btn btn-sm btn-outline-secondary" id="undo_button">Undo</button>
+			</div>
+
+			<h5>Categories</h5>
+			<ul id="categories_coll"></ul>
+
+			<h5>Actions</h5>
+			<div class="tool-buttons mb-3">
+				<button class="btn btn-sm btn-success" id="save_button">Save</button>
+				<button class="btn btn-sm btn-primary" id="screenshot_button">Screenshot</button>
+				<button class="btn btn-sm btn-danger" id="clear_button">Clear</button>
+			</div>
+
+			<div class="mt-auto">
+				<button class="btn btn-sm btn-outline-info w-100 mb-2" id="view_shp_button">View Dataset</button>
+				<button class="btn btn-sm btn-outline-info w-100 mb-2" id="view_images_button" data-bs-toggle="modal" data-bs-target="#imagesModal">View All Images</button>
+				<button class="btn btn-sm btn-outline-info w-100" data-bs-toggle="modal" data-bs-target="#exampleModalCenter">Bug report</button>
+			</div>
 		</div>
+	</div>
+
+	<!-- Footer -->
+	<div class="footer-bar">
+		<div class="coordinate-display">
+			<span id="gps-coords">GPS: </span> | 
+			<span id="pixel-coords">Pixels: </span> | 
+			<span id="measure-distance">Distance: </span>
+		</div>
+		<div class="nav-buttons">
+			<button class="btn btn-sm btn-outline-secondary" id="prev_button">Previous</button>
+			<button class="btn btn-sm btn-primary" id="next_button">Next</button>
+		</div>
+	</div>
 </div>
 
-<!-- Bootstrap core JavaScript -->
-<script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q" crossorigin="anonymous"></script>
-<script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0-beta.3/js/bootstrap.min.js" integrity="sha384-a5N7Y/aK3qNeh15eJKGWxsqtnX/wWdSZSKp+81YjTmS15nvnvxKHuzaWwXHDli+4" crossorigin="anonymous"></script>
+<!-- Modal -->
+<div class="modal fade" id="exampleModalCenter" tabindex="-1" role="dialog" aria-labelledby="exampleModalCenterTitle" aria-hidden="true">
+	<div class="modal-dialog modal-dialog-centered" role="document">
+		<div class="modal-content">
+			<div class="modal-header">
+				<h5 class="modal-title" id="exampleModalCenterTitle">Bug report</h5>
+				<button type="button" class="close" data-bs-dismiss="modal" aria-label="Close">
+					<span aria-hidden="true">&times;</span>
+				</button>
+			</div>
+			<div class="modal-body">
+				<div id="bugreport_body">
+					<div class="form-group">
+						<label for="bugreport_title">Subject</label>
+						<input type="text" class="form-control" name="bugreport_title" id="bugreport_title" placeholder="Enter the subject of the bug report">
+					</div>
+					<div class="form-group">
+						<label for="bugreport_description">Description</label>
+						<textarea class="form-control" name="bugreport_description" id="bugreport_description" rows="3" placeholder="Describe the bug and what you were doing when it happened"></textarea>
+					</div>
+				</div>
+			</div>
+			<div class="modal-footer">
+				<button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+				<button type="button" id="bugreport_send" class="btn btn-primary">Submit report</button>
+			</div>
+		</div>
+	</div>
+</div>
 
-<!-- Menu Toggle Script -->
-<script>
-$("#menu-toggle").click(function(e) {
-	e.preventDefault();
-	$("#wrapper").toggleClass("toggled");
-});
+<!-- Add full image URL display at the bottom -->
+<div style="position: fixed; bottom: 0; left: 0; width: 100%; background: rgba(0,0,0,0.7); color: white; padding: 5px 10px; font-size: 12px; z-index: 1000;">
+    <span id="full-image-url">Image URL: </span>
+</div>
 
-$('#selectAll').on('click', function(e) {
-		$(".sub_chk").prop('checked', true);
-});
+<!-- Images List Modal -->
+<div class="modal fade" id="imagesModal" tabindex="-1" role="dialog" aria-labelledby="imagesModalTitle" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-scrollable" role="document">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="imagesModalTitle">All Available Images</h5>
+                <button type="button" class="close" data-bs-dismiss="modal" aria-label="Close">
+                    <span aria-hidden="true">&times;</span>
+                </button>
+            </div>
+            <div class="modal-body">
+                <div class="text-center mb-3" id="loading-images">
+                    <div class="spinner-border text-primary" role="status">
+                        <span class="sr-only">Loading...</span>
+                    </div>
+                    <p>Loading images from database...</p>
+                </div>
+                <div id="images-list-container">
+                    <table class="table table-striped table-hover">
+                        <thead>
+                            <tr>
+                                <th>Preview</th>
+                                <th>Image Name</th>
+                                <th>Dimensions</th>
+                                <th>Full URL</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="images-list-body">
+                            <!-- Images will be populated here -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                <button type="button" class="btn btn-primary" id="refresh-images-list">Refresh List</button>
+            </div>
+        </div>
+    </div>
+</div>
 
-$("#category_submit").click(function() {
-	$("#category_submit").attr("disabled", true);
-	if ($("#add_new_category").val()) {
-		$.post( "/webclient/addCategory", { data: $("#add_new_category").val()}).done(function(data) {
-			if (data.result == "failure") { alert(data.reason);};
-			if (data.result == "success") {
-				// cat_list_item = '<li style="display: inline-block; padding-left: 42px; width: 100%;"><input type="radio" style="float: left;margin-top: 11px;display: block;" name="category_select" value="' + data.data + '">' +
-				// ' <label style="float: left;" for="' + data.data + '"><table style="width:100%"><tr><td><p>'+ data.data +
-				// '</p></td><td><p><span class="circle" style="color:' + data.color + '; background-color:' + data.color +
-				// ';"></span></p></td></tr></table></label></li>';
+<!-- JavaScript for the app -->
+<script src="https://code.jquery.com/jquery-3.6.0.min.js" integrity="sha256-/xUj+3OJU5yExlq6GSYGSHk7tPXikynS7ogEvDej/m4=" crossorigin="anonymous"></script>
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.0.2/dist/js/bootstrap.bundle.min.js" integrity="sha384-MrcW6ZMFYlzcLA8Nl+NtUVF0sA7MsXsP1UyJoMp4YLEuNSfAP+JcXn/tWtIaxVXM" crossorigin="anonymous"></script>
+<script src="https://deepgis.org/static/scripts/paperjs/dist/paper-full.min.js"></script>
+<script type="text/javascript">
+	// Setup PaperJS
+	paper.install(window);
+	
+	var globals = {
+		tool: null,
+		path: null,
+		raster: null,
+		groups: [],
+		undos: [],
+		initialCenter: null,
+		currentTool: null,
+		measurementPath: null,
+		measurementText: null,
+		isMeasuring: false,
+		measureStartPoint: null
+	};
 
-				cat_list_item = '<li class="grid">' +
-				'<input type="radio" name="category_select" value="' + data.data + '" id="'+ data.data +'">' +
-				'<label for="' + data.data + '">'+ data.data + '</label>'+
-				'<span class="circle" style="color:' + data.color + '; background-color:' +
-				data.color + ';"></span></li>';
+	// Variable declarations
+	let currentImage = null;
+	let currentCategory = null;
+	let currentColor = "#ff0000";
+	let isDrawing = false;
+	let currentPath = [];
+	let allPaths = [];
+	let currentTool = null;
+	let imageCache = {};
 
-				$('#categories_coll').append($(cat_list_item));
-				showSnackBar("Succesfully added "+data.data+" to Categories");
+	// ... existing code ...
 
-				//update category properties
-				updateCategoryProperties();
-
-				//clear input field value after new category has been added
-				var inputField = document.getElementById("add_new_category");
-				inputField.value = "";
-			};
-		});
-	} else {
-		alert("Missing category name.");
-	}
-	$("#category_submit").attr("disabled", false);
-});
-
-
-//function to update category properties when new categories are added
-function updateCategoryProperties() {
-	$.ajax({
-		url: "/webclient/getCategoryInfo",
-		type: "GET",
-		dataType: "json",
-		success: function(response) {
-			for (category in response)
-			{
-				if (category in globals.categoryGroups) {
-					globals.categoryGroups[category].style.fillColor = response[category]['color'];
-					globals.categoryGroups[category].style.strokeColor = response[category]['color'];
+	// Add measurement tool functionality
+	function initializeMeasurementTool() {
+		const measureTool = new paper.Tool();
+		
+		measureTool.onMouseDown = function(event) {
+			if (!globals.isMeasuring) {
+				// Start measuring
+				globals.isMeasuring = true;
+				globals.measureStartPoint = event.point;
+				
+				// Create measurement line
+				globals.measurementPath = new paper.Path.Line(event.point, event.point);
+				globals.measurementPath.strokeColor = 'red';
+				globals.measurementPath.strokeWidth = 2;
+				globals.measurementPath.dashArray = [5, 5];
+				
+				// Show measurement info
+				$('#measurementInfo').show().css({
+					left: event.point.x + 10,
+					top: event.point.y + 10
+				});
+			} else {
+				// Finish measuring
+				globals.isMeasuring = false;
+				
+				// Clean up
+				if (globals.measurementPath) {
+					globals.measurementPath.remove();
+					globals.measurementPath = null;
 				}
-				else {
-						globals.categoryGroups[category] = new paper.Group({
-							name: category,
-							strokeColor: response[category]['color'],
-							fillColor: response[category]['color'],
-							strokeWidth: 0,
-							opacity: 0.5,
-							visible: true
-						});
+				
+				$('#measurementInfo').hide();
+				$('#measure-distance').text('Distance: 0px');
+			}
+		};
+		
+		measureTool.onMouseMove = function(event) {
+			// Update pixel coordinates display
+			const x = Math.round(event.point.x);
+			const y = Math.round(event.point.y);
+			$('#pixel-coords').text(`Pixels: ${x},${y}`);
+			
+			// Update measurement if measuring
+			if (globals.isMeasuring && globals.measureStartPoint) {
+				// Update line
+				globals.measurementPath.segments[1].point = event.point;
+				
+				// Calculate distance
+				const dx = event.point.x - globals.measureStartPoint.x;
+				const dy = event.point.y - globals.measureStartPoint.y;
+				const distance = Math.sqrt(dx * dx + dy * dy);
+				const rounded = Math.round(distance * 100) / 100;
+				
+				// Update displays
+				$('#measure-distance').text(`Distance: ${rounded}px`);
+				$('#measurementInfo').text(`Start: ${Math.round(globals.measureStartPoint.x)},${Math.round(globals.measureStartPoint.y)} | End: ${x},${y} | Distance: ${rounded}px`);
+				
+				// Position the info box
+				$('#measurementInfo').css({
+					left: event.point.x + 10,
+					top: event.point.y + 10
+				});
+			}
+		};
+		
+		return measureTool;
+	}
+
+	// ... existing code ...
+
+	// Add event listeners for UI
+	$(document).ready(function() {
+		// Initialize PaperJS
+		paper.setup('canvas');
+		
+		// Global variable to track image load status
+		let imageLoadAttempted = false;
+
+		// Initialize tools
+		const penTool = new paper.Tool();
+		penTool.onMouseDown = function(event) {
+			globals.path = new paper.Path();
+			globals.path.strokeColor = 'black';
+			globals.path.strokeWidth = 2;
+			globals.path.add(event.point);
+		};
+		penTool.onMouseDrag = function(event) {
+			globals.path.add(event.point);
+		};
+		
+		const polygonTool = new paper.Tool();
+		polygonTool.onMouseDown = function(event) {
+			if (!globals.path) {
+				globals.path = new paper.Path();
+				globals.path.strokeColor = 'black';
+				globals.path.strokeWidth = 2;
+				globals.path.add(event.point);
+			} else {
+				globals.path.add(event.point);
+			}
+		};
+		polygonTool.onKeyDown = function(event) {
+			if (event.key === 'escape' && globals.path) {
+				globals.path.closed = true;
+				globals.path.fillColor = 'rgba(255, 255, 255, 0.5)';
+				globals.path = null;
+			}
+		};
+		
+		const rectangleTool = new paper.Tool();
+		rectangleTool.onMouseDown = function(event) {
+			globals.path = new paper.Path.Rectangle({
+				from: event.point,
+				to: event.point,
+				strokeColor: 'black',
+				strokeWidth: 2
+			});
+		};
+		rectangleTool.onMouseDrag = function(event) {
+			globals.path.remove();
+			globals.path = new paper.Path.Rectangle({
+				from: globals.path.firstSegment.point,
+				to: event.point,
+				strokeColor: 'black',
+				strokeWidth: 2
+			});
+		};
+		
+		const circleTool = new paper.Tool();
+		circleTool.onMouseDown = function(event) {
+			globals.path = new paper.Path.Circle({
+				center: event.point,
+				radius: 1,
+				strokeColor: 'black',
+				strokeWidth: 2
+			});
+		};
+		circleTool.onMouseDrag = function(event) {
+			const radius = event.point.getDistance(globals.path.position);
+			globals.path.remove();
+			globals.path = new paper.Path.Circle({
+				center: globals.path.position,
+				radius: radius,
+				strokeColor: 'black',
+				strokeWidth: 2
+			});
+		};
+		
+		const measureTool = initializeMeasurementTool();
+		
+		const removeTool = new paper.Tool();
+		removeTool.onMouseDown = function(event) {
+			const hitResult = paper.project.hitTest(event.point);
+			if (hitResult && hitResult.item) {
+				hitResult.item.remove();
+			}
+		};
+		
+		// Tool button listeners
+		$('#pen_button').click(function() {
+			penTool.activate();
+			updateActiveToolButton(this);
+			globals.currentTool = 'pen';
+		});
+		
+		$('#polygon_button').click(function() {
+			polygonTool.activate();
+			updateActiveToolButton(this);
+			globals.currentTool = 'polygon';
+		});
+		
+		$('#rectangle_button').click(function() {
+			rectangleTool.activate();
+			updateActiveToolButton(this);
+			globals.currentTool = 'rectangle';
+		});
+		
+		$('#circle_button').click(function() {
+			circleTool.activate();
+			updateActiveToolButton(this);
+			globals.currentTool = 'circle';
+		});
+		
+		$('#measure_button').click(function() {
+			measureTool.activate();
+			updateActiveToolButton(this);
+			globals.currentTool = 'measure';
+		});
+		
+		$('#remove_button').click(function() {
+			removeTool.activate();
+			updateActiveToolButton(this);
+			globals.currentTool = 'remove';
+		});
+		
+		// Navigation buttons
+		$('#prev_button').click(function() {
+			loadImage('prev');
+		});
+		
+		$('#next_button').click(function() {
+			loadImage('next');
+		});
+		
+		// Helper function to update active button
+		function updateActiveToolButton(button) {
+			$('.tool-buttons button').removeClass('active');
+			$(button).addClass('active');
+		}
+		
+		// Function to show loading overlay
+		function showLoadingOverlay() {
+			// Create loading overlay if it doesn't exist
+			if ($('#loading-overlay').length === 0) {
+				$('body').append(`
+					<div id="loading-overlay">
+						<div class="spinner"></div>
+						<div class="loading-text">Loading image...</div>
+					</div>
+				`);
+			} else {
+				$('#loading-overlay').show();
+			}
+		}
+		
+		// Function to hide loading overlay
+		function hideLoadingOverlay() {
+			$('#loading-overlay').hide();
+		}
+		
+		// Function to clear the canvas
+		function clearCanvas() {
+			const canvas = document.getElementById('canvas');
+			if (canvas) {
+				const ctx = canvas.getContext('2d');
+				ctx.clearRect(0, 0, canvas.width, canvas.height);
+			}
+			
+			// Clear any active drawing states
+			isDrawing = false;
+			currentPath = [];
+			allPaths = [];
+			
+			// Reset any active tools
+			currentTool = null;
+			$(".tool-button").removeClass("active");
+		}
+		
+		// Function to load image from server
+		function loadImage(direction) {
+			showLoadingOverlay("Loading image...");
+			
+			$.ajax({
+				url: "{% url 'get_new_image' %}",
+				type: "GET",
+				data: { direction: direction },
+				success: function(data) {
+					if (data.success) {
+						displayImage(
+							data.image_name,
+							data.image_path,
+							data.categories,
+							data.shapes,
+							data.colors,
+							{ x: 0, y: 0 },
+							data.width,
+							data.height,
+							0
+						);
+						
+						// Update navigation button states
+						updateNavigationButtons(data.navigation);
+						
+						// Update the full image URL display
+						$("#full-image-url").text("Image URL: " + data.image_path);
+						
+						hideLoadingOverlay();
+						showSuccessMessage("Image loaded successfully");
+					} else {
+						hideLoadingOverlay();
+						// Show error message without falling back to sample images
+						showErrorMessage(data.message || "No images available from server. Please add images to the database.");
+						
+						// Draw error message on canvas
+						const canvas = document.getElementById('canvas');
+						if (canvas) {
+							const ctx = canvas.getContext('2d');
+							canvas.width = 800;  // Default size
+							canvas.height = 600;
+							ctx.fillStyle = "#f8d7da";
+							ctx.fillRect(0, 0, canvas.width, canvas.height);
+							ctx.font = "16px Arial";
+							ctx.fillStyle = "#721c24";
+							ctx.textAlign = "center";
+							ctx.fillText("No Images Available", canvas.width/2, canvas.height/2 - 20);
+							ctx.font = "14px Arial";
+							ctx.fillText("Please add images to the database", canvas.width/2, canvas.height/2 + 20);
+						}
+					}
+				},
+				error: function(xhr, status, error) {
+					console.error("Error loading image:", error);
+					hideLoadingOverlay();
+					showErrorMessage("Server error: " + error);
+					
+					// Draw error message on canvas
+					const canvas = document.getElementById('canvas');
+					if (canvas) {
+						const ctx = canvas.getContext('2d');
+						canvas.width = 800;  // Default size
+						canvas.height = 600;
+						ctx.fillStyle = "#f8d7da";
+						ctx.fillRect(0, 0, canvas.width, canvas.height);
+						ctx.font = "16px Arial";
+						ctx.fillStyle = "#721c24";
+						ctx.textAlign = "center";
+						ctx.fillText("Server Error", canvas.width/2, canvas.height/2 - 20);
+						ctx.font = "14px Arial";
+						ctx.fillText("Could not connect to server: " + error, canvas.width/2, canvas.height/2 + 20);
+					}
+				}
+			});
+		}
+		
+		// Function to update navigation button states
+		function updateNavigationButtons(navigation) {
+			if (navigation) {
+				$("#prev_button").prop("disabled", !navigation.has_prev);
+				$("#next_button").prop("disabled", !navigation.has_next);
+				
+				// Update image count if available
+				if (navigation.current_index && navigation.total_images) {
+					$("#imageMetadata").text(`Image ${navigation.current_index} of ${navigation.total_images}`);
 				}
 			}
-		},
-		error: function(xhr, errmsg, err) {
-			alert(xhr.status + ": " + xhr.responseText);
 		}
+		
+		// Function to display image
+		function displayImage(imageName, imagePath, categories, shapes, colors, coordinates, width, height, rotation) {
+			// Clear the canvas and existing shapes
+			clearCanvas();
+			
+			// Update the image information in the UI
+			$("#image_info_name").text("Image: " + imageName);
+			$("#image_info_dimensions").text("Dimensions: " + width + "x" + height);
+			
+			// Update the full image URL display
+			$("#full-image-url").text("Image URL: " + imagePath);
+			
+			// Store the current image data
+			currentImage = {
+				name: imageName,
+				path: imagePath,
+				categories: categories,
+				shapes: shapes,
+				colors: colors,
+				coordinates: coordinates,
+				width: width,
+				height: height,
+				rotation: rotation
+			};
+			
+			// Update categories dropdown
+			updateCategoriesDropdown(categories, colors);
+			
+			// Draw the image on the canvas
+			drawImageOnCanvas(imagePath, width, height, rotation);
+		}
+		
+		// Function to update the categories dropdown
+		function updateCategoriesDropdown(categories, colors) {
+			// Clear the existing categories
+			const categoriesList = $("#categories_coll");
+			categoriesList.empty();
+			
+			// Add categories to the list
+			for (let i = 0; i < categories.length; i++) {
+				const categoryName = categories[i];
+				const categoryColor = colors[i];
+				
+				// Create list item
+				const listItem = $("<li></li>")
+					.attr("data-category", categoryName)
+					.attr("data-color", categoryColor)
+					.html(`
+						<span class="category-name">${categoryName}</span>
+						<div class="circle" style="background-color: ${categoryColor}"></div>
+					`);
+				
+				// Add click handler to select this category
+				listItem.on("click", function() {
+					// Remove active class from all items
+					categoriesList.find("li").removeClass("active");
+					// Add active class to this item
+					$(this).addClass("active");
+					// Set current category and color
+					currentCategory = categoryName;
+					currentColor = categoryColor;
+				});
+				
+				// Add to the list
+				categoriesList.append(listItem);
+			}
+			
+			// Set the first category as selected
+			if (categories.length > 0) {
+				categoriesList.find("li:first").addClass("active");
+				currentCategory = categories[0];
+				currentColor = colors[0];
+			}
+		}
+		
+		// Function to draw the image on canvas
+		function drawImageOnCanvas(imagePath, width, height, rotation) {
+			const canvas = document.getElementById('canvas');
+			const ctx = canvas.getContext('2d');
+			
+			// Check if image path seems valid before trying to load
+			if (!imagePath || typeof imagePath !== 'string' || imagePath.trim() === '' || imagePath.endsWith('/')) {
+				console.error("Invalid image path:", imagePath);
+				showErrorMessage("Invalid image path. The URL appears to be a directory or is empty.");
+				
+				// Draw error message on canvas
+				canvas.width = width || 800;
+				canvas.height = height || 600;
+				ctx.fillStyle = "#f8d7da";
+				ctx.fillRect(0, 0, canvas.width, canvas.height);
+				ctx.font = "16px Arial";
+				ctx.fillStyle = "#721c24";
+				ctx.textAlign = "center";
+				ctx.fillText("Invalid Image Path", canvas.width/2, canvas.height/2 - 20);
+				ctx.font = "12px Arial"; 
+				ctx.fillText(imagePath || "No path provided", canvas.width/2, canvas.height/2 + 20);
+				
+				hideLoadingOverlay();
+				return;
+			}
+			
+			// Set canvas dimensions
+			canvas.width = width;
+			canvas.height = height;
+			
+			// Create a new image
+			const img = new Image();
+			
+			// Set a 15-second timeout to catch hanging loads
+			const loadTimeout = setTimeout(() => {
+				if (!img.complete) {
+					console.error("Image load timed out:", imagePath);
+					hideLoadingOverlay();
+					showErrorMessage(`Image load timed out. Check console for details.`);
+				}
+			}, 15000);
+			
+			img.onload = function() {
+				// Clear the timeout as the image loaded successfully
+				clearTimeout(loadTimeout);
+				
+				// Clear the canvas
+				ctx.clearRect(0, 0, canvas.width, canvas.height);
+				
+				// Save the current context state
+				ctx.save();
+				
+				// Move to the center of the canvas
+				ctx.translate(canvas.width / 2, canvas.height / 2);
+				
+				// Rotate if needed
+				if (rotation !== 0) {
+					ctx.rotate(rotation * Math.PI / 180);
+				}
+				
+				// Draw the image centered
+				ctx.drawImage(img, -canvas.width / 2, -canvas.height / 2, canvas.width, canvas.height);
+				
+				// Restore the context
+				ctx.restore();
+				
+				// Hide loading overlay once image is loaded
+				hideLoadingOverlay();
+				console.log("Image loaded successfully:", imagePath);
+			};
+			
+			img.onerror = function(e) {
+				// Clear the timeout as the image failed to load
+				clearTimeout(loadTimeout);
+				
+				console.error("Failed to load image:", imagePath, e);
+				hideLoadingOverlay();
+				
+				// Try to provide a more detailed error message
+				let errorDetail = "";
+				if (imagePath.indexOf('://') === -1) {
+					errorDetail = " URL may be missing protocol (http:// or https://).";
+				} else if (imagePath.endsWith('/')) {
+					errorDetail = " URL appears to be a directory, not a file.";
+				} else if (!imagePath.match(/\.(jpg|jpeg|png|gif|bmp|webp|tiff)$/i)) {
+					errorDetail = " URL might not point to an image file.";
+				} else {
+					errorDetail = " The server may be unreachable or the file may not exist.";
+				}
+				
+				showErrorMessage(`Failed to load image.${errorDetail} Path: ${imagePath}`);
+				
+				// Draw error message on canvas
+				ctx.fillStyle = "#f8d7da";
+				ctx.fillRect(0, 0, canvas.width, canvas.height);
+				ctx.font = "16px Arial";
+				ctx.fillStyle = "#721c24";
+				ctx.textAlign = "center";
+				ctx.fillText("Image Failed to Load", canvas.width/2, canvas.height/2 - 20);
+				ctx.font = "12px Arial";
+				ctx.fillText(imagePath, canvas.width/2, canvas.height/2 + 20);
+				ctx.font = "12px Arial";
+				ctx.fillText(errorDetail, canvas.width/2, canvas.height/2 + 40);
+			};
+			
+			// Set crossOrigin to anonymous to prevent CORS issues with external image sources
+			img.crossOrigin = "anonymous";
+			
+			// Log the attempt to load the image
+			console.log("Attempting to load image:", imagePath);
+			
+			// Set the image source last, as this triggers the loading
+			img.src = imagePath;
+		}
+		
+		// Start initial image loading
+		console.log("Initiating first image load from database...");
+		loadImage('next');
 	});
-}
 
+	// Function to show error, success, or warning messages to user
+	function showNotification(message, type = 'error', duration = 5000) {
+		// Create notification container if it doesn't exist
+		if ($('#notification-container').length === 0) {
+			$('body').append('<div id="notification-container"></div>');
+		}
+		
+		// Generate a unique ID for this notification
+		const notificationId = 'notification-' + Date.now();
+		
+		// Create notification element
+		const notification = $(`
+			<div id="${notificationId}" class="notification ${type}">
+				<span class="close-btn">&times;</span>
+				${message}
+			</div>
+		`);
+		
+		// Add to container
+		$('#notification-container').append(notification);
+		
+		// Add click handler to close button
+		$(`#${notificationId} .close-btn`).on('click', function() {
+			$(`#${notificationId}`).css('animation', 'fade-out 0.5s').on('animationend', function() {
+				$(this).remove();
+			});
+		});
+		
+		// Auto-remove after duration
+		setTimeout(() => {
+			if ($(`#${notificationId}`).length) {
+				$(`#${notificationId}`).css('animation', 'fade-out 0.5s').on('animationend', function() {
+					$(this).remove();
+				});
+			}
+		}, duration);
+	}
+
+	// Convenience functions for different notification types
+	function showErrorMessage(message, duration = 5000) {
+		showNotification(message, 'error', duration);
+	}
+
+	function showSuccessMessage(message, duration = 5000) {
+		showNotification(message, 'success', duration);  
+	}
+
+	function showWarningMessage(message, duration = 5000) {
+		showNotification(message, 'warning', duration);
+	}
 </script>
-</body>
-</html>
+{% endblock %}
