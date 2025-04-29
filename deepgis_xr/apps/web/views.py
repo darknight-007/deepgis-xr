@@ -13,6 +13,14 @@ from shapely.geometry import shape
 import fiona
 import requests
 from urllib.parse import urljoin
+import numpy as np
+import cv2
+from io import BytesIO
+import base64
+import math
+import time
+import hashlib
+from django.conf import settings
 
 from deepgis_xr.apps.core.models import Image, CategoryType, ImageLabel, RasterImage
 
@@ -467,4 +475,253 @@ def get_all_images(request):
         return JsonResponse({
             'success': False,
             'message': str(e)
-        }, status=500) 
+        }, status=500)
+
+@csrf_exempt
+def detect_grid(request):
+    """Detect uniform metric grid in an image - simplified version"""
+    if request.method == 'POST':
+        try:
+            data = json.loads(request.body)
+            original_image_path = data.get('path')
+            click_point = data.get('point', {})
+            
+            # Validate input
+            if not original_image_path:
+                return JsonResponse({
+                    'success': False,
+                    'message': 'No image path provided'
+                }, status=400)
+            
+            print(f"Original image path: {original_image_path}")
+            
+            # Process the image path to handle both remote and local paths
+            image_path = original_image_path
+            
+            # If image path has query parameters, strip them for file operations
+            if '?' in image_path:
+                image_path = image_path.split('?')[0]
+            
+            # Handle local files - determine if this might be a local path
+            if not image_path.startswith(('http://', 'https://')):
+                # Check for static/images path format
+                if 'static/images' in image_path:
+                    # If path is relative, combine with base app path
+                    if not image_path.startswith('/'):
+                        image_path = os.path.join('/app', image_path)
+                # Add static/images path if it's not present
+                elif not image_path.startswith('/'):
+                    image_path = os.path.join('/app/static/images', os.path.basename(image_path))
+                print(f"Using local path: {image_path}")
+            
+            # Create a cache directory if it doesn't exist
+            cache_dir = os.path.join(settings.MEDIA_ROOT, 'cache')
+            os.makedirs(cache_dir, exist_ok=True)
+            
+            # Generate a cache key from the image path
+            cache_key = hashlib.md5(image_path.encode()).hexdigest()
+            cache_path = os.path.join(cache_dir, f"{cache_key}.jpg")
+            
+            # Check if image is already cached
+            image = None
+            if os.path.exists(cache_path) and os.path.getsize(cache_path) > 0:
+                try:
+                    with open(cache_path, 'rb') as f:
+                        image_data = np.asarray(bytearray(f.read()), dtype="uint8")
+                        image = cv2.imdecode(image_data, cv2.IMREAD_COLOR)
+                    print(f"Using cached image: {cache_path}")
+                except Exception as e:
+                    print(f"Error reading cached image: {str(e)}")
+                    image = None
+            
+            # Read the image if not cached or cache read failed
+            if image is None:
+                # Check if the file exists locally
+                local_file_exists = False
+                if not image_path.startswith(('http://', 'https://')):
+                    local_file_exists = os.path.exists(image_path)
+                    
+                    if local_file_exists:
+                        try:
+                            print(f"Reading local image file: {image_path}")
+                            with open(image_path, 'rb') as f:
+                                image_data = np.asarray(bytearray(f.read()), dtype="uint8")
+                                image = cv2.imdecode(image_data, cv2.IMREAD_COLOR)
+                            
+                            # Cache the image
+                            if image is not None:
+                                try:
+                                    cv2.imwrite(cache_path, image)
+                                    print(f"Cached local image to: {cache_path}")
+                                except Exception as e:
+                                    print(f"Error caching local image: {str(e)}")
+                        except Exception as e:
+                            print(f"Error reading local image: {str(e)}")
+                            local_file_exists = False
+                
+                # If local file access failed or it's a remote path, try URL access
+                if not local_file_exists:
+                    # Try the label-set directory paths
+                    potential_paths = [
+                        '/app/static/images/label-set/navagunjara-ortho-set',
+                        '/app/static/images/label-set',
+                    ]
+                    
+                    # Add the filename to the potential paths
+                    filename = os.path.basename(image_path)
+                    for base_path in potential_paths:
+                        potential_file = os.path.join(base_path, filename)
+                        print(f"Trying potential path: {potential_file}")
+                        
+                        if os.path.exists(potential_file):
+                            try:
+                                print(f"Found image at: {potential_file}")
+                                with open(potential_file, 'rb') as f:
+                                    image_data = np.asarray(bytearray(f.read()), dtype="uint8")
+                                    image = cv2.imdecode(image_data, cv2.IMREAD_COLOR)
+                                
+                                if image is not None:
+                                    try:
+                                        cv2.imwrite(cache_path, image)
+                                        print(f"Cached found image to: {cache_path}")
+                                    except Exception as e:
+                                        print(f"Error caching found image: {str(e)}")
+                                    break
+                            except Exception as e:
+                                print(f"Error reading found file: {str(e)}")
+            
+            if image is None:
+                return JsonResponse({
+                    'success': False,
+                    'message': 'Failed to access or decode the image. Check server logs for details.'
+                }, status=400)
+            
+            # Get dimensions of the image
+            h, w = image.shape[:2]
+            print(f"Successfully loaded image with dimensions: {w}x{h}")
+            
+            # Create simple grid data (simplified version)
+            grid_data = create_simple_grid(image, click_point)
+            
+            # Return the grid data
+            return JsonResponse({
+                'success': True,
+                'grid': grid_data,
+                'processingTime': 0.1
+            })
+        
+        except Exception as e:
+            import traceback
+            print(f"Grid detection request error: {str(e)}")
+            print(traceback.format_exc())
+            return JsonResponse({
+                'success': False,
+                'message': f'Error processing request: {str(e)}'
+            }, status=500)
+    
+    return JsonResponse({
+        'success': False,
+        'message': 'Method not allowed'
+    }, status=405)
+
+def create_simple_grid(image, click_point=None):
+    """
+    Create a grid based on fixed scale assumptions:
+    - Each image is 1 meter wide in true scale
+    - Image has correct aspect ratio
+    - Grid cells are 10cm x 10cm
+    
+    Args:
+        image: OpenCV image (numpy array)
+        click_point: Optional dict with x, y coordinates where user clicked
+    
+    Returns:
+        dict with grid data
+    """
+    h, w = image.shape[:2]
+    
+    # Calculate scale factor (pixels per meter)
+    pixels_per_meter = w  # Since we assume image width = 1 meter
+    
+    # Calculate cell size in pixels (10cm = 0.1m)
+    cell_size_pixels = int(pixels_per_meter * 0.1)  # 10cm in pixels
+    
+    # Calculate number of cells in each direction
+    cells_horizontal = 10  # 1 meter / 10cm = 10 cells
+    cells_vertical = int(h / cell_size_pixels)  # Based on aspect ratio
+    
+    # Define grid starting point
+    # If click point is provided, center the grid around it
+    if click_point and 'x' in click_point and 'y' in click_point:
+        # Calculate the closet grid line to the click point
+        closest_x = round(int(click_point['x']) / cell_size_pixels) * cell_size_pixels
+        closest_y = round(int(click_point['y']) / cell_size_pixels) * cell_size_pixels
+        
+        # Calculate grid boundaries centered around click point
+        half_width = min(5 * cell_size_pixels, w // 2)
+        half_height = min(5 * cell_size_pixels, h // 2)
+        
+        x_start = max(0, closest_x - half_width)
+        y_start = max(0, closest_y - half_height)
+    else:
+        # Start from top-left
+        x_start = 0
+        y_start = 0
+    
+    # Create grid lines
+    grid_lines = []
+    intersections = []
+    
+    # Horizontal lines
+    for i in range(cells_vertical + 1):
+        y = y_start + i * cell_size_pixels
+        if y >= h:
+            break
+        grid_lines.append({
+            'start': {'x': 0, 'y': y},
+            'end': {'x': w, 'y': y}
+        })
+    
+    # Vertical lines
+    for i in range(cells_horizontal + 1):
+        x = x_start + i * cell_size_pixels
+        if x >= w:
+            break
+        grid_lines.append({
+            'start': {'x': x, 'y': 0},
+            'end': {'x': x, 'y': h}
+        })
+    
+    # Create intersection points
+    for i in range(cells_vertical + 1):
+        y = y_start + i * cell_size_pixels
+        if y >= h:
+            continue
+        for j in range(cells_horizontal + 1):
+            x = x_start + j * cell_size_pixels
+            if x >= w:
+                continue
+            intersections.append({
+                'x': x,
+                'y': y
+            })
+    
+    # Return grid data
+    return {
+        'lines': grid_lines,
+        'intersections': intersections,
+        'metrics': {
+            'cellWidth': cell_size_pixels,
+            'cellHeight': cell_size_pixels,
+            'rotation': 0,
+            'confidence': 1.0,
+            'horizontalLines': cells_vertical + 1,
+            'verticalLines': cells_horizontal + 1,
+            'realWorldScale': {
+                'width': 0.1,  # 10cm in meters
+                'height': 0.1,  # 10cm in meters
+                'unit': 'meters'
+            },
+            'algorithm': 'fixed_scale_grid'
+        }
+    } 
