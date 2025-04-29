@@ -631,6 +631,30 @@
 		return path;
 	}
 
+	// Utility function to convert screen coordinates to paper coordinates
+	function getAdjustedPoint(event) {
+		// Get the canvas element
+		const canvas = document.getElementById('canvas');
+		
+		// Get the canvas rect relative to the viewport
+		const rect = canvas.getBoundingClientRect();
+		
+		// Calculate the scale factor between actual canvas size and its display size
+		const scaleX = canvas.width / rect.width;
+		const scaleY = canvas.height / rect.height;
+		
+		// Get the mouse position relative to the canvas element
+		const clientX = event.clientX || (event.originalEvent && event.originalEvent.clientX) || 0;
+		const clientY = event.clientY || (event.originalEvent && event.originalEvent.clientY) || 0;
+		
+		// Calculate position within the element
+		const x = (clientX - rect.left) * scaleX;
+		const y = (clientY - rect.top) * scaleY;
+		
+		// Convert to paper points
+		return paper.view.viewToProject(new paper.Point(x, y));
+	}
+
 	// Improved cleanup function to properly handle active paths and states
 	function cleanupActivePath() {
 		// Cancel any active drawing
@@ -686,23 +710,25 @@
 			globals.path = new paper.Path();
 			globals.path.strokeColor = currentColor;
 			globals.path.strokeWidth = 2;
+			// Use the actual point from the event
 			globals.path.add(event.point);
 		};
 		penTool.onMouseDrag = function(event) {
 			if (globals.path) {
+				// Use the actual point from the event
 				globals.path.add(event.point);
 			}
 		};
 		penTool.onMouseUp = function(event) {
 			if (globals.path) {
 				// Close the path for a clean shape
-				globals.path.simplify(10);
-				
-				// Finalize the shape
-				finalizeShape(globals.path);
-				
-				// Reset the path
-				globals.path = null;
+					globals.path.simplify(10);
+					
+					// Finalize the shape
+					finalizeShape(globals.path);
+					
+					// Reset the path
+					globals.path = null;
 			}
 		};
 		
@@ -1482,6 +1508,16 @@
 				// Set up the view size and center
 				paper.view.viewSize = new paper.Size(width, height);
 				paper.view.center = new paper.Point(width / 2, height / 2);
+				
+				// Set the canvas element size to match the view size
+				const canvas = document.getElementById('canvas');
+				canvas.width = width;
+				canvas.height = height;
+				
+				// Ensure the canvas container adapts to the canvas size
+				const canvasDiv = document.getElementById('canvasDiv');
+				canvasDiv.style.width = width + 'px';
+				canvasDiv.style.height = height + 'px';
 				
 				// Store initial center for reset function
 				globals.initialCenter = paper.view.center.clone();
