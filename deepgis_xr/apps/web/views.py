@@ -22,7 +22,7 @@ import time
 import hashlib
 from django.conf import settings
 
-from deepgis_xr.apps.core.models import Image, CategoryType, ImageLabel, RasterImage
+from deepgis_xr.apps.core.models import Image, CategoryType, ImageLabel, RasterImage, Labeler, CategoryLabel
 
 
 class BaseView(LoginRequiredMixin, TemplateView):
@@ -216,6 +216,9 @@ def get_new_image(request):
             shapes = ['circle', 'circle', 'circle', 'circle']
             colors = ['#FF0000', '#00FF00', '#00AA00', '#0000FF']
         
+        # Get existing labels for this image
+        existing_labels = get_image_labels(image.id)
+        
         # Return the image data
         return JsonResponse({
             'success': True,
@@ -231,7 +234,8 @@ def get_new_image(request):
                 'has_next': current_index < len(all_images) - 1,
                 'current_index': current_index + 1,
                 'total_images': len(all_images)
-            }
+            },
+            'existing_labels': existing_labels
         })
         
     except Exception as e:
@@ -243,14 +247,43 @@ def get_new_image(request):
             'message': f'Error loading image: {str(e)}'
         }, status=500)
 
+def get_image_labels(image_id):
+    """Get existing labels for an image"""
+    from deepgis_xr.apps.core.models import ImageLabel
+    
+    try:
+        # Find the most recent label for this image
+        labels = ImageLabel.objects.filter(image_id=image_id).order_by('-pub_date')
+        
+        if not labels.exists():
+            return None
+        
+        # Get the most recent label
+        latest_label = labels.first()
+        
+        # The combined_label_shapes field contains the GeoJSON data
+        if latest_label.combined_label_shapes:
+            try:
+                import json
+                # Parse the JSON data
+                label_data = json.loads(latest_label.combined_label_shapes)
+                return label_data
+            except json.JSONDecodeError:
+                print(f"Error decoding JSON for label {latest_label.id}")
+                return None
+        
+        return None
+    except Exception as e:
+        print(f"Error retrieving image labels: {str(e)}")
+        return None
+
 @csrf_exempt
 def save_label(request):
+    """Legacy endpoint - redirects to save_labels"""
     if request.method == 'POST':
         try:
-            data = json.loads(request.body)
-            # Here you would save the label data
-            # For now, just return success
-            return JsonResponse({'status': 'success'})
+            # Simply call save_labels
+            return save_labels(request)
         except json.JSONDecodeError:
             return JsonResponse({'status': 'error', 'message': 'Invalid JSON'}, status=400)
     return JsonResponse({'status': 'error', 'message': 'Method not allowed'}, status=405)
@@ -300,11 +333,115 @@ def save_labels(request):
     if request.method == 'POST':
         try:
             data = json.loads(request.body)
-            # Save the GeoJSON data to your database or file system
-            # This is a simplified example - you'll want to add proper validation and error handling
-            return JsonResponse({'status': 'success'})
+            
+            # Validate required data
+            if not data.get('features'):
+                return JsonResponse({'status': 'error', 'message': 'No features to save'}, status=400)
+            
+            if not data.get('metadata') or not data.get('metadata').get('image'):
+                return JsonResponse({'status': 'error', 'message': 'Missing image metadata'}, status=400)
+            
+            # Get image from database
+            image_name = data['metadata']['image']
+            try:
+                image = Image.objects.get(name=image_name)
+            except Image.DoesNotExist:
+                return JsonResponse({'status': 'error', 'message': f'Image {image_name} not found'}, status=404)
+            
+            # Get or create a user/labeler (use the current user if authenticated)
+            labeler = None
+            if request.user.is_authenticated:
+                from deepgis_xr.apps.core.models import Labeler
+                labeler, _ = Labeler.objects.get_or_create(user=request.user)
+            
+            # Create the parent ImageLabel record
+            image_label = ImageLabel(
+                image=image,
+                combined_label_shapes=json.dumps(data),
+                labeler=labeler
+            )
+            
+            # Add time taken if available
+            if data['metadata'].get('timeTaken'):
+                image_label.time_taken = data['metadata']['timeTaken']
+            
+            # Save the parent label
+            image_label.save()
+            
+            # Process grid metrics if available
+            if data['metadata'].get('gridMetrics'):
+                # Store grid metrics in the database if needed
+                # This could be in a separate model or as part of the ImageLabel
+                pass
+            
+            # Create CategoryLabel records for each category
+            categories_by_name = {}
+            for feature in data['features']:
+                category_name = feature['properties'].get('category')
+                if not category_name:
+                    continue
+                
+                # Get or create the category
+                if category_name not in categories_by_name:
+                    try:
+                        category = CategoryType.objects.get(category_name=category_name)
+                    except CategoryType.DoesNotExist:
+                        # Create a new category if it doesn't exist
+                        color_hex = feature['properties'].get('color', '#FF0000')
+                        # Convert hex to RGB
+                        color_hex = color_hex.lstrip('#')
+                        rgb = tuple(int(color_hex[i:i+2], 16) for i in (0, 2, 4))
+                        
+                        # Get or create the Color object
+                        from deepgis_xr.apps.core.models import Color
+                        color, _ = Color.objects.get_or_create(
+                            red=rgb[0], 
+                            green=rgb[1], 
+                            blue=rgb[2]
+                        )
+                        
+                        # Create the category
+                        category = CategoryType.objects.create(
+                            category_name=category_name,
+                            color=color,
+                            label_type='P'  # Polygon by default
+                        )
+                    
+                    categories_by_name[category_name] = {
+                        'category': category,
+                        'features': []
+                    }
+                
+                # Add the feature to the category's feature list
+                categories_by_name[category_name]['features'].append(feature)
+            
+            # Create a CategoryLabel for each category
+            for category_name, data in categories_by_name.items():
+                # Create feature collection for this category
+                feature_collection = {
+                    'type': 'FeatureCollection',
+                    'features': data['features']
+                }
+                
+                # Create the CategoryLabel
+                CategoryLabel.objects.create(
+                    category=data['category'],
+                    label_shapes=json.dumps(feature_collection),
+                    parent_label=image_label
+                )
+            
+            return JsonResponse({
+                'status': 'success', 
+                'message': 'Labels saved successfully',
+                'label_id': image_label.id
+            })
+            
         except Exception as e:
-            return JsonResponse({'status': 'error', 'message': str(e)})
+            import traceback
+            print(f"Error saving labels: {str(e)}")
+            print(traceback.format_exc())
+            return JsonResponse({'status': 'error', 'message': str(e)}, status=500)
+    
     return JsonResponse({'status': 'error', 'message': 'Method not allowed'}, status=405)
 
 @csrf_exempt

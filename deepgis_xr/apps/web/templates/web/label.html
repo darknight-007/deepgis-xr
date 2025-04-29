@@ -284,40 +284,11 @@
 		color: black;
 	}
 
-	/* Zoom controls */
-	.zoom-controls {
-		position: absolute;
-		bottom: 20px;
-		right: 20px;
-		background-color: rgba(255, 255, 255, 0.7);
-		border-radius: 4px;
-		padding: 5px;
-		box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2);
-		z-index: 1000;
-		display: flex;
-		flex-direction: column;
-	}
-
-	.zoom-controls button {
-		margin: 2px 0;
-		width: 40px;
-		height: 40px;
-		font-size: 18px;
-		border: 1px solid #ddd;
-		background-color: white;
-		border-radius: 4px;
-		cursor: pointer;
-		transition: background-color 0.2s;
-	}
-
-	.zoom-controls button:hover {
-		background-color: #f0f0f0;
-	}
-
-	.zoom-controls .zoom-info {
-		text-align: center;
-		font-size: 12px;
-		margin: 5px 0;
+	/* Zoom display */
+	#zoom-level {
+		font-size: 14px;
+		font-weight: bold;
+		color: #495057;
 	}
 
 	@keyframes slide-in {
@@ -338,14 +309,6 @@
 			<div id="canvasDiv">
 				<canvas id="canvas" resize></canvas>
 				<div id="measurementInfo" class="measurement-info"></div>
-			</div>
-			<!-- Add zoom controls -->
-			<div class="zoom-controls">
-				<button id="zoom-in" title="Zoom In">+</button>
-				<div class="zoom-info" id="zoom-level">100%</div>
-				<button id="zoom-out" title="Zoom Out">-</button>
-				<button id="zoom-fit" title="Fit to Screen">⤢</button>
-				<button id="zoom-reset" title="Reset Zoom (100%)">⟲</button>
 			</div>
 		</div>
 
@@ -376,60 +339,47 @@
 
 			<h5>Actions</h5>
 			<div class="tool-buttons mb-3">
-				<button class="btn btn-sm btn-success" id="save_button">Save</button>
-				<button class="btn btn-sm btn-primary" id="screenshot_button">Screenshot</button>
-				<button class="btn btn-sm btn-info" id="pdf_button">Save as PDF</button>
-				<button class="btn btn-sm btn-danger" id="clear_button">Clear</button>
+				<!-- Main action buttons in a 2x2 grid -->
+				<div class="d-flex mb-2">
+					<button class="btn btn-sm btn-success flex-fill me-1" id="save_button">Save</button>
+					<button class="btn btn-sm btn-primary flex-fill" id="screenshot_button">Screenshot</button>
+				</div>
+				<div class="d-flex mb-2">
+					<button class="btn btn-sm btn-info flex-fill me-1" id="pdf_button">Save as PDF</button>
+					<button class="btn btn-sm btn-danger flex-fill" id="clear_button">Clear</button>
+				</div>
+
+				<!-- Navigation buttons -->
+				<div class="d-flex mt-2">
+					<button class="btn btn-sm btn-outline-secondary flex-fill me-1" id="prev_button">Previous</button>
+					<button class="btn btn-sm btn-primary flex-fill" id="next_button">Next</button>
+				</div>
+				
+				<!-- Zoom controls -->
+				<h6 class="mt-3 mb-2">Zoom</h6>
+				<div class="d-flex align-items-center mb-2">
+					<button class="btn btn-sm btn-outline-secondary me-2" id="zoom-in" title="Zoom In">+</button>
+					<div class="flex-fill text-center" id="zoom-level">100%</div>
+					<button class="btn btn-sm btn-outline-secondary ms-2" id="zoom-out" title="Zoom Out">-</button>
+				</div>
+				<div class="d-flex">
+					<button class="btn btn-sm btn-outline-secondary flex-fill me-1" id="zoom-fit" title="Fit to Screen">⤢</button>
+					<button class="btn btn-sm btn-outline-secondary flex-fill" id="zoom-reset" title="Reset Zoom (100%)">⟲</button>
+				</div>
 			</div>
 
 			<div class="mt-auto">
-				<button class="btn btn-sm btn-outline-info w-100 mb-2" id="view_shp_button">View Dataset</button>
-				<button class="btn btn-sm btn-outline-info w-100 mb-2" id="view_images_button" data-bs-toggle="modal" data-bs-target="#imagesModal">View All Images</button>
-				<button class="btn btn-sm btn-outline-info w-100" data-bs-toggle="modal" data-bs-target="#exampleModalCenter">Bug report</button>
+				<!-- Buttons removed as requested -->
 			</div>
 		</div>
 	</div>
 
 	<!-- Footer -->
 	<div class="footer-bar">
-		<div class="coordinate-display">
+		<div class="coordinate-display w-100">
 			<span id="gps-coords">GPS: </span> | 
 			<span id="pixel-coords">Pixels: </span> | 
 			<span id="measure-distance">Distance: </span>
-		</div>
-		<div class="nav-buttons">
-			<button class="btn btn-sm btn-outline-secondary" id="prev_button">Previous</button>
-			<button class="btn btn-sm btn-primary" id="next_button">Next</button>
-		</div>
-	</div>
-</div>
-
-<!-- Modal -->
-<div class="modal fade" id="exampleModalCenter" tabindex="-1" role="dialog" aria-labelledby="exampleModalCenterTitle" aria-hidden="true">
-	<div class="modal-dialog modal-dialog-centered" role="document">
-		<div class="modal-content">
-			<div class="modal-header">
-				<h5 class="modal-title" id="exampleModalCenterTitle">Bug report</h5>
-				<button type="button" class="close" data-bs-dismiss="modal" aria-label="Close">
-					<span aria-hidden="true">&times;</span>
-				</button>
-			</div>
-			<div class="modal-body">
-				<div id="bugreport_body">
-					<div class="form-group">
-						<label for="bugreport_title">Subject</label>
-						<input type="text" class="form-control" name="bugreport_title" id="bugreport_title" placeholder="Enter the subject of the bug report">
-					</div>
-					<div class="form-group">
-						<label for="bugreport_description">Description</label>
-						<textarea class="form-control" name="bugreport_description" id="bugreport_description" rows="3" placeholder="Describe the bug and what you were doing when it happened"></textarea>
-					</div>
-				</div>
-			</div>
-			<div class="modal-footer">
-				<button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
-				<button type="button" id="bugreport_send" class="btn btn-primary">Submit report</button>
-			</div>
 		</div>
 	</div>
 </div>
@@ -439,47 +389,7 @@
     <span id="full-image-url">Image URL: </span>
 </div>
 
-<!-- Images List Modal -->
-<div class="modal fade" id="imagesModal" tabindex="-1" role="dialog" aria-labelledby="imagesModalTitle" aria-hidden="true">
-    <div class="modal-dialog modal-lg modal-dialog-scrollable" role="document">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h5 class="modal-title" id="imagesModalTitle">All Available Images</h5>
-                <button type="button" class="close" data-bs-dismiss="modal" aria-label="Close">
-                    <span aria-hidden="true">&times;</span>
-                </button>
-            </div>
-            <div class="modal-body">
-                <div class="text-center mb-3" id="loading-images">
-                    <div class="spinner-border text-primary" role="status">
-                        <span class="sr-only">Loading...</span>
-                    </div>
-                    <p>Loading images from database...</p>
-                </div>
-                <div id="images-list-container">
-                    <table class="table table-striped table-hover">
-                        <thead>
-                            <tr>
-                                <th>Preview</th>
-                                <th>Image Name</th>
-                                <th>Dimensions</th>
-                                <th>Full URL</th>
-                                <th>Actions</th>
-                            </tr>
-                        </thead>
-                        <tbody id="images-list-body">
-                            <!-- Images will be populated here -->
-                        </tbody>
-                    </table>
-                </div>
-            </div>
-            <div class="modal-footer">
-                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
-                <button type="button" class="btn btn-primary" id="refresh-images-list">Refresh List</button>
-            </div>
-        </div>
-    </div>
-</div>
+<!-- Images List Modal removed as requested -->
 
 <!-- JavaScript for the app -->
 <script src="https://code.jquery.com/jquery-3.6.0.min.js" integrity="sha256-/xUj+3OJU5yExlq6GSYGSHk7tPXikynS7ogEvDej/m4=" crossorigin="anonymous"></script>
@@ -522,54 +432,46 @@
 	// Setup PaperJS
 	paper.install(window);
 	
-	var globals = {
-		tool: null,
-		path: null,
-		raster: null,
-		groups: [],
-		undos: [],
-		redos: [], // Add redos stack for redo functionality
-		initialCenter: null,
-		currentTool: null,
-		measurementPath: null,
-		measurementText: null,
-		isMeasuring: false,
-		measureStartPoint: null,
-		tempGroup: null, // For temporary items during draw operations
-		zoomFactor: 1, // Current zoom level
-		isDragging: false, // Flag for panning
-		lastPoint: null, // Last point for panning
-		viewTool: null, // Store the view tool for panning
-		previousTool: null, // Store the previous tool for switching
-		startPoint: null, // Added for rectangle tool
-		centerPoint: null, // Added for circle tool
-		imageLoaded: false, // Track if image is fully loaded before enabling tools
-		isDrawing: false, // Track active drawing state
-		gridMetrics: null, // Store grid metrics for measurements
-		savedMeasurements: [], // Array to store saved measurements
-		// Blueprint styling constants
+	// Global variables for PaperJS tools
+	const globals = {
+		path: null,                  // Current drawing path
+		startPoint: null,            // Starting point for shapes
+		centerPoint: null,           // Center point for circles
+		tempGroup: null,             // Temporary group for current operation
+		raster: null,                // The image raster
+		undos: [],                   // Stack of operations for undo
+		redos: [],                   // Stack of operations for redo
+		imageLoaded: false,          // Flag to track image loading
+		zoomFactor: 1,               // Current zoom level
+		currentTool: null,           // Current active tool
+		isMeasuring: false,          // Flag for measurement mode
+		measureStartPoint: null,     // Start point for measurement
+		measurementPath: null,       // Current measurement path
+		measurementText: null,       // Text for current measurement
+		savedMeasurements: [],       // Array of saved measurements
+		gridMetrics: null,           // Grid metrics for measurement calculations
+		sessionStartTime: new Date().getTime(), // Track session start time for metrics
+		
+		// Blueprint styling options
 		blueprintStyle: {
+			shapes: {
+				fillColor: new paper.Color(1, 1, 0, 0.2) // Light yellow semi-transparent
+			},
 			measureLine: {
-				color: '#57ACDC',  // Sky blue color for better visibility
-				width: 2.5,        // Thicker lines
-				dashArray: [6, 4]  // Adjusted dash pattern
+				color: new paper.Color(0, 0.5, 1),
+				width: 1.5,
+				dashArray: [5, 5]
 			},
 			measureText: {
-				fontFamily: 'Courier New, monospace',
 				fontSize: 12,
-				fontWeight: 'bold',
-				color: '#1E54A7',
-				backgroundColor: new Color(0.94, 0.97, 1, 0.9)
+				fontFamily: 'monospace',
+				color: new paper.Color(0, 0, 0.8),
+				backgroundColor: new paper.Color(1, 1, 1, 0.8)
 			},
 			dimension: {
-				lineColor: '#57ACDC',  // Sky blue color for better visibility
-				textColor: '#1E54A7',
-				arrowSize: 6,
-				endpointRadius: 3.5,   // Size of endpoint markers
-				endpointStyle: 'crosshair' // 'crosshair' or 'dot'
-			},
-			shapes: {
-				fillColor: new Color(1, 1, 0.7, 0.25) // Light yellow with high transparency
+				lineColor: new paper.Color(0, 0, 0.7),
+				endpointRadius: 4,
+				arrowSize: 8
 			}
 		}
 	};
@@ -1672,9 +1574,28 @@
 				
 				// Collect all drawn shapes into a GeoJSON-like structure
 				const features = [];
+				const measurements = [];
+				
 				paper.project.activeLayer.children.forEach(function(child) {
-					// Skip the image and measurement
+					// Skip the image and measurement path that's currently being drawn
 					if (child === globals.raster || child === globals.measurementPath) {
+						return;
+					}
+					
+					// Handle measurements
+					if (child.data && child.data.type === 'measurement') {
+						// Create a measurement feature
+						const measurement = {
+							type: 'measurement',
+							pixelDistance: child.data.pixelDistance,
+							metricDistance: child.data.metricDistance,
+							imperialDistance: child.data.imperialDistance,
+							startPoint: [child.data.startPoint.x, child.data.startPoint.y],
+							endPoint: [child.data.endPoint.x, child.data.endPoint.y],
+							createdAt: child.data.createdAt
+						};
+						
+						measurements.push(measurement);
 						return;
 					}
 					
@@ -1683,34 +1604,46 @@
 						return;
 					}
 					
-					// Create a feature for each path
-					const feature = {
-						type: 'Feature',
-						geometry: {
-							type: getGeometryType(child),
-							coordinates: getCoordinates(child)
-						},
-						properties: {
-							category: child.data.category,
-							color: child.data.color,
-							createdAt: child.data.createdAt
-						}
-					};
-					
-					features.push(feature);
+					try {
+						// Create a feature for the path
+						const feature = {
+							type: 'Feature',
+							geometry: {
+								type: getGeometryType(child),
+								coordinates: getCoordinates(child)
+							},
+							properties: {
+								category: child.data.category,
+								color: child.data.color,
+								createdAt: child.data.createdAt || new Date().getTime()
+							}
+						};
+						
+						features.push(feature);
+					} catch (e) {
+						console.error("Error processing shape:", e, child);
+						showWarningMessage("Some shapes couldn't be saved due to errors. See console for details.");
+					}
 				});
 				
 				// Create a GeoJSON structure
 				const geojson = {
 					type: 'FeatureCollection',
 					features: features,
+					measurements: measurements,
 					metadata: {
 						image: currentImage ? currentImage.name : null,
 						imageWidth: paper.view.viewSize.width,
 						imageHeight: paper.view.viewSize.height,
-						timestamp: new Date().toISOString()
+						timestamp: new Date().toISOString(),
+						timeTaken: Math.round((new Date().getTime() - globals.sessionStartTime) / 1000)
 					}
 				};
+				
+				// Include grid metrics if available
+				if (globals.gridMetrics) {
+					geojson.metadata.gridMetrics = globals.gridMetrics;
+				}
 				
 				// Show loading overlay
 				showLoadingOverlay();
@@ -1750,27 +1683,69 @@
 		}
 		
 		function getCoordinates(path) {
-			if (path instanceof paper.Path.Circle) {
-				// For circles, use center as point
-				return [path.position.x, path.position.y];
-			} else if (path.closed) {
-				// For polygons, return array of point arrays including closure
-				const coords = [];
-				path.segments.forEach(function(segment) {
-					coords.push([segment.point.x, segment.point.y]);
-				});
-				// Close the ring by adding the first point again
-				if (coords.length > 0) {
-					coords.push([path.segments[0].point.x, path.segments[0].point.y]);
+			try {
+				if (path instanceof paper.Path.Circle) {
+					// For circles, use center and radius
+					return [path.position.x, path.position.y, path.bounds.width / 2];
+				} else if (path instanceof paper.Path.Rectangle) {
+					// For rectangles, get the four corners
+					const topLeft = [path.bounds.topLeft.x, path.bounds.topLeft.y];
+					const topRight = [path.bounds.topRight.x, path.bounds.topRight.y];
+					const bottomRight = [path.bounds.bottomRight.x, path.bounds.bottomRight.y];
+					const bottomLeft = [path.bounds.bottomLeft.x, path.bounds.bottomLeft.y];
+					return [[topLeft, topRight, bottomRight, bottomLeft, topLeft]]; // Close the polygon
+				} else if (path.closed && path.segments) {
+					// For polygons, return array of point arrays including closure
+					const coords = [];
+					path.segments.forEach(function(segment) {
+						coords.push([segment.point.x, segment.point.y]);
+					});
+					// Close the ring by adding the first point again
+					if (coords.length > 0) {
+						coords.push([path.segments[0].point.x, path.segments[0].point.y]);
+					}
+					return [coords]; // GeoJSON polygons require an extra array level
+				} else if (path.segments) {
+					// For lines, return array of point arrays
+					const coords = [];
+					path.segments.forEach(function(segment) {
+						coords.push([segment.point.x, segment.point.y]);
+					});
+					return coords;
+				} else if (path.children) {
+					// For groups (like compound paths), get the first child's coordinates
+					for (let i = 0; i < path.children.length; i++) {
+						const child = path.children[i];
+						if (child.segments) {
+							return getCoordinates(child);
+						}
+					}
+					// If no valid children with segments, fall back to bounds
+					return getCoordinatesFromBounds(path);
+				} else {
+					// Fallback for other types - use bounding box
+					return getCoordinatesFromBounds(path);
 				}
-				return [coords]; // GeoJSON polygons require an extra array level
-			} else {
-				// For lines, return array of point arrays
-				const coords = [];
-				path.segments.forEach(function(segment) {
-					coords.push([segment.point.x, segment.point.y]);
-				});
-				return coords;
+			} catch (e) {
+				console.error("Error getting coordinates:", e, path);
+				// Provide a fallback
+				return getCoordinatesFromBounds(path);
+			}
+		}
+		
+		// Fallback method to get coordinates from bounds
+		function getCoordinatesFromBounds(path) {
+			try {
+				const bounds = path.bounds;
+				const topLeft = [bounds.topLeft.x, bounds.topLeft.y];
+				const topRight = [bounds.topRight.x, bounds.topRight.y];
+				const bottomRight = [bounds.bottomRight.x, bounds.bottomRight.y];
+				const bottomLeft = [bounds.bottomLeft.x, bounds.bottomLeft.y];
+				return [[topLeft, topRight, bottomRight, bottomLeft, topLeft]]; // Close the polygon
+			} catch (e) {
+				console.error("Error getting bounds coordinates:", e);
+				// Ultimate fallback - return empty array
+				return [[0, 0]];
 			}
 		}
 		
