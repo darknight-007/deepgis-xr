@@ -267,6 +267,42 @@
 		color: black;
 	}
 
+	/* Zoom controls */
+	.zoom-controls {
+		position: absolute;
+		bottom: 20px;
+		right: 20px;
+		background-color: rgba(255, 255, 255, 0.7);
+		border-radius: 4px;
+		padding: 5px;
+		box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2);
+		z-index: 1000;
+		display: flex;
+		flex-direction: column;
+	}
+
+	.zoom-controls button {
+		margin: 2px 0;
+		width: 40px;
+		height: 40px;
+		font-size: 18px;
+		border: 1px solid #ddd;
+		background-color: white;
+		border-radius: 4px;
+		cursor: pointer;
+		transition: background-color 0.2s;
+	}
+
+	.zoom-controls button:hover {
+		background-color: #f0f0f0;
+	}
+
+	.zoom-controls .zoom-info {
+		text-align: center;
+		font-size: 12px;
+		margin: 5px 0;
+	}
+
 	@keyframes slide-in {
 		from { transform: translateX(100%); opacity: 0; }
 		to { transform: translateX(0); opacity: 1; }
@@ -285,6 +321,14 @@
 			<div id="canvasDiv">
 				<canvas id="canvas" resize></canvas>
 				<div id="measurementInfo" class="measurement-info"></div>
+			</div>
+			<!-- Add zoom controls -->
+			<div class="zoom-controls">
+				<button id="zoom-in" title="Zoom In">+</button>
+				<div class="zoom-info" id="zoom-level">100%</div>
+				<button id="zoom-out" title="Zoom Out">-</button>
+				<button id="zoom-fit" title="Fit to Screen">⤢</button>
+				<button id="zoom-reset" title="Reset Zoom (100%)">⟲</button>
 			</div>
 		</div>
 
@@ -433,12 +477,23 @@
 		raster: null,
 		groups: [],
 		undos: [],
+		redos: [], // Add redos stack for redo functionality
 		initialCenter: null,
 		currentTool: null,
 		measurementPath: null,
 		measurementText: null,
 		isMeasuring: false,
-		measureStartPoint: null
+		measureStartPoint: null,
+		tempGroup: null, // For temporary items during draw operations
+		zoomFactor: 1, // Current zoom level
+		isDragging: false, // Flag for panning
+		lastPoint: null, // Last point for panning
+		viewTool: null, // Store the view tool for panning
+		previousTool: null, // Store the previous tool for switching
+		startPoint: null, // Added for rectangle tool
+		centerPoint: null, // Added for circle tool
+		imageLoaded: false, // Track if image is fully loaded before enabling tools
+		isDrawing: false // Track active drawing state
 	};
 
 	// Variable declarations
@@ -450,8 +505,6 @@
 	let allPaths = [];
 	let currentTool = null;
 	let imageCache = {};
-
-	// ... existing code ...
 
 	// Add measurement tool functionality
 	function initializeMeasurementTool() {
@@ -521,12 +574,98 @@
 		return measureTool;
 	}
 
-	// ... existing code ...
+	// Function to add a shape to the undo history
+	function addToUndoStack(path) {
+		if (path) {
+			// Store the drawn item in the undo stack
+			globals.undos.push(path);
+			
+			// Clear redos when a new action is performed
+			globals.redos = [];
+		}
+	}
+
+	// Function to implement undo
+	function undoLastOperation() {
+		if (globals.undos.length > 0) {
+			// Get the last drawn item
+			const lastItem = globals.undos.pop();
+			
+			// Add to redos stack before removing
+			if (lastItem) {
+				// Clone the item if you want to implement redo
+				globals.redos.push(lastItem);
+				
+				// Remove from canvas
+				lastItem.remove();
+			}
+			
+			// Redraw to ensure canvas is updated
+			paper.view.update();
+		}
+	}
+
+	// Function to finalize a shape with proper styling based on category
+	function finalizeShape(path) {
+		if (!path) return null;
+		
+		// Apply the current category color
+		path.strokeColor = currentColor;
+		path.strokeWidth = 2;
+		
+		// Apply a semi-transparent fill
+		path.fillColor = new Color(currentColor);
+		path.fillColor.alpha = 0.3;
+		
+		// Add metadata to the path for category
+		path.data = {
+			category: currentCategory,
+			color: currentColor,
+			createdAt: new Date().getTime()
+		};
+		
+		// Add to undo stack
+		addToUndoStack(path);
+		
+		// Return the finalized path
+		return path;
+	}
+
+	// Improved cleanup function to properly handle active paths and states
+	function cleanupActivePath() {
+		// Cancel any active drawing
+		if (globals.path) {
+			globals.path.remove();
+			globals.path = null;
+		}
+		
+		// Reset drawing flags
+		globals.isDrawing = false;
+		globals.startPoint = null;
+		globals.centerPoint = null;
+		globals.isMeasuring = false;
+		globals.measureStartPoint = null;
+		
+		// Remove any temporary drawing elements
+		if (globals.tempGroup) {
+			globals.tempGroup.remove();
+			globals.tempGroup = null;
+		}
+		
+		// Update the view to ensure changes are reflected
+		paper.view.update();
+	}
 
 	// Add event listeners for UI
 	$(document).ready(function() {
 		// Initialize PaperJS
 		paper.setup('canvas');
+		
+		// Initialize view center and zoom
+		globals.initialCenter = paper.view.center.clone();
+
+		// Enable mousewheel zooming and drag panning
+		initializeViewControls();
 		
 		// Global variable to track image load status
 		let imageLoadAttempted = false;
@@ -534,71 +673,238 @@
 		// Initialize tools
 		const penTool = new paper.Tool();
 		penTool.onMouseDown = function(event) {
+			if (!globals.imageLoaded) {
+				showWarningMessage("Please wait for image to fully load before using tools");
+				return;
+			}
+			// Check if we have a selected category
+			if (!currentCategory) {
+				showWarningMessage("Please select a category first");
+				return;
+			}
+			
 			globals.path = new paper.Path();
-			globals.path.strokeColor = 'black';
+			globals.path.strokeColor = currentColor;
 			globals.path.strokeWidth = 2;
 			globals.path.add(event.point);
 		};
 		penTool.onMouseDrag = function(event) {
-			globals.path.add(event.point);
+			if (globals.path) {
+				globals.path.add(event.point);
+			}
+		};
+		penTool.onMouseUp = function(event) {
+			if (globals.path) {
+				// Close the path for a clean shape
+				globals.path.simplify(10);
+				
+				// Finalize the shape
+				finalizeShape(globals.path);
+				
+				// Reset the path
+				globals.path = null;
+			}
 		};
 		
 		const polygonTool = new paper.Tool();
 		polygonTool.onMouseDown = function(event) {
+			if (!globals.imageLoaded) {
+				showWarningMessage("Please wait for image to fully load before using tools");
+				return;
+			}
+			// Check if we have a selected category
+			if (!currentCategory) {
+				showWarningMessage("Please select a category first");
+				return;
+			}
+			
+			// On first click, create a new path
 			if (!globals.path) {
 				globals.path = new paper.Path();
-				globals.path.strokeColor = 'black';
+				globals.path.strokeColor = currentColor;
 				globals.path.strokeWidth = 2;
 				globals.path.add(event.point);
+				
+				// Add helper text
+				showWarningMessage("Click to add points, press ESC to complete shape", 3000);
 			} else {
+				// On subsequent clicks, add points to the path
 				globals.path.add(event.point);
 			}
 		};
 		polygonTool.onKeyDown = function(event) {
 			if (event.key === 'escape' && globals.path) {
-				globals.path.closed = true;
-				globals.path.fillColor = 'rgba(255, 255, 255, 0.5)';
-				globals.path = null;
+				// Close the path to create a polygon
+				if (globals.path.segments.length >= 3) {
+					globals.path.closed = true;
+					
+					// Finalize the shape
+					finalizeShape(globals.path);
+					
+					// Reset the path
+					globals.path = null;
+				} else {
+					// Need at least 3 points for a polygon
+					showWarningMessage("Need at least 3 points for a polygon");
+				}
 			}
 		};
 		
 		const rectangleTool = new paper.Tool();
 		rectangleTool.onMouseDown = function(event) {
+			if (!globals.imageLoaded) {
+				showWarningMessage("Please wait for image to fully load before using tools");
+				return;
+			}
+			// Check if we have a selected category
+			if (!currentCategory) {
+				showWarningMessage("Please select a category first");
+				return;
+			}
+			
+			// Store the start point for rectangle creation
+			globals.startPoint = event.point.clone();
+			
+			// Create initial rectangle
 			globals.path = new paper.Path.Rectangle({
-				from: event.point,
+				from: globals.startPoint,
 				to: event.point,
-				strokeColor: 'black',
+				strokeColor: currentColor,
 				strokeWidth: 2
 			});
 		};
 		rectangleTool.onMouseDrag = function(event) {
-			globals.path.remove();
-			globals.path = new paper.Path.Rectangle({
-				from: globals.path.firstSegment.point,
-				to: event.point,
-				strokeColor: 'black',
-				strokeWidth: 2
-			});
+			if (globals.path && globals.startPoint) {
+				// Instead of removing and recreating, just adjust the existing rectangle
+				try {
+					// Remove the existing path
+					globals.path.remove();
+					
+					// Create a new rectangle from the stored start point
+					globals.path = new paper.Path.Rectangle({
+						from: globals.startPoint,
+						to: event.point,
+						strokeColor: currentColor,
+						strokeWidth: 2
+					});
+				} catch (e) {
+					console.error('Error updating rectangle:', e);
+					// If there was an error, create a new rectangle
+					globals.path = new paper.Path.Rectangle({
+						from: globals.startPoint,
+						to: event.point,
+						strokeColor: currentColor,
+						strokeWidth: 2
+					});
+				}
+				
+				// Ensure the view is updated
+				paper.view.update();
+			}
+		};
+		rectangleTool.onMouseUp = function(event) {
+			if (globals.path) {
+				// Ensure the rectangle has a minimum size
+				if (Math.abs(event.point.x - globals.startPoint.x) < 5 &&
+					Math.abs(event.point.y - globals.startPoint.y) < 5) {
+					// Rectangle is too small, make it a minimum size
+					globals.path.remove();
+					globals.path = new paper.Path.Rectangle({
+						from: globals.startPoint,
+						to: new paper.Point(
+							globals.startPoint.x + 10, 
+							globals.startPoint.y + 10
+						),
+						strokeColor: currentColor,
+						strokeWidth: 2
+					});
+				}
+				
+				// Finalize the shape
+				finalizeShape(globals.path);
+				
+				// Reset the path and start point
+				globals.path = null;
+				globals.startPoint = null;
+			}
 		};
 		
 		const circleTool = new paper.Tool();
 		circleTool.onMouseDown = function(event) {
+			if (!globals.imageLoaded) {
+				showWarningMessage("Please wait for image to fully load before using tools");
+				return;
+			}
+			// Check if we have a selected category
+			if (!currentCategory) {
+				showWarningMessage("Please select a category first");
+				return;
+			}
+			
+			// Store the center point for circle creation
+			globals.centerPoint = event.point.clone();
+			
+			// Create initial circle
 			globals.path = new paper.Path.Circle({
-				center: event.point,
+				center: globals.centerPoint,
 				radius: 1,
-				strokeColor: 'black',
+				strokeColor: currentColor,
 				strokeWidth: 2
 			});
 		};
 		circleTool.onMouseDrag = function(event) {
-			const radius = event.point.getDistance(globals.path.position);
-			globals.path.remove();
-			globals.path = new paper.Path.Circle({
-				center: globals.path.position,
-				radius: radius,
-				strokeColor: 'black',
-				strokeWidth: 2
-			});
+			if (globals.path && globals.centerPoint) {
+				// Calculate radius based on distance from center
+				const radius = event.point.getDistance(globals.centerPoint);
+				
+				try {
+					// Remove the existing path
+					globals.path.remove();
+					
+					// Create a new circle with updated radius
+					globals.path = new paper.Path.Circle({
+						center: globals.centerPoint,
+						radius: radius,
+						strokeColor: currentColor,
+						strokeWidth: 2
+					});
+				} catch (e) {
+					console.error('Error updating circle:', e);
+					// If there was an error, create a new circle
+					globals.path = new paper.Path.Circle({
+						center: globals.centerPoint,
+						radius: radius,
+						strokeColor: currentColor,
+						strokeWidth: 2
+					});
+				}
+				
+				// Ensure the view is updated
+				paper.view.update();
+			}
+		};
+		circleTool.onMouseUp = function(event) {
+			if (globals.path) {
+				// Ensure the circle has a minimum size
+				const radius = event.point.getDistance(globals.centerPoint);
+				if (radius < 5) {
+					// Circle is too small, make it a minimum size
+					globals.path.remove();
+					globals.path = new paper.Path.Circle({
+						center: globals.centerPoint,
+						radius: 5,
+						strokeColor: currentColor,
+						strokeWidth: 2
+					});
+				}
+				
+				// Finalize the shape
+				finalizeShape(globals.path);
+				
+				// Reset the path and center point
+				globals.path = null;
+				globals.centerPoint = null;
+			}
 		};
 		
 		const measureTool = initializeMeasurementTool();
@@ -607,45 +913,138 @@
 		removeTool.onMouseDown = function(event) {
 			const hitResult = paper.project.hitTest(event.point);
 			if (hitResult && hitResult.item) {
+				// Store the removed item in undo stack before removing
+				addToUndoStack(hitResult.item);
+				
+				// Remove the item
 				hitResult.item.remove();
 			}
 		};
 		
 		// Tool button listeners
 		$('#pen_button').click(function() {
+			if (!globals.imageLoaded) {
+				showWarningMessage("Please wait for image to fully load before using tools");
+				return;
+			}
+			cleanupActivePath();
 			penTool.activate();
 			updateActiveToolButton(this);
 			globals.currentTool = 'pen';
 		});
 		
 		$('#polygon_button').click(function() {
+			if (!globals.imageLoaded) {
+				showWarningMessage("Please wait for image to fully load before using tools");
+				return;
+			}
+			cleanupActivePath();
 			polygonTool.activate();
 			updateActiveToolButton(this);
 			globals.currentTool = 'polygon';
 		});
 		
 		$('#rectangle_button').click(function() {
+			if (!globals.imageLoaded) {
+				showWarningMessage("Please wait for image to fully load before using tools");
+				return;
+			}
+			cleanupActivePath();
 			rectangleTool.activate();
 			updateActiveToolButton(this);
 			globals.currentTool = 'rectangle';
 		});
 		
 		$('#circle_button').click(function() {
+			if (!globals.imageLoaded) {
+				showWarningMessage("Please wait for image to fully load before using tools");
+				return;
+			}
+			cleanupActivePath();
 			circleTool.activate();
 			updateActiveToolButton(this);
 			globals.currentTool = 'circle';
 		});
 		
 		$('#measure_button').click(function() {
+			if (!globals.imageLoaded) {
+				showWarningMessage("Please wait for image to fully load before using tools");
+				return;
+			}
+			cleanupActivePath();
 			measureTool.activate();
 			updateActiveToolButton(this);
 			globals.currentTool = 'measure';
 		});
 		
 		$('#remove_button').click(function() {
+			if (!globals.imageLoaded) {
+				showWarningMessage("Please wait for image to fully load before using tools");
+				return;
+			}
+			cleanupActivePath();
 			removeTool.activate();
 			updateActiveToolButton(this);
 			globals.currentTool = 'remove';
+		});
+		
+		// Add pan tool button
+		$('#zoom-in, #zoom-out, #zoom-fit, #zoom-reset').click(function() {
+			// Activate the view tool for panning
+			if (globals.viewTool) {
+				globals.viewTool.activate();
+				updateActiveToolButton(null);  // Deselect all tool buttons
+				globals.currentTool = 'view';
+			}
+		});
+		
+		// Add key handler for tool switching
+		$(document).keydown(function(e) {
+			// Spacebar for pan tool
+			if (e.keyCode === 32) { // Spacebar
+				if (globals.viewTool) {
+					globals.viewTool.activate();
+					updateActiveToolButton(null);
+					globals.currentTool = 'view';
+					$('#canvas').css('cursor', 'grab');
+					e.preventDefault();
+				}
+			}
+		});
+		
+		$(document).keyup(function(e) {
+			// Return to previous tool when spacebar is released
+			if (e.keyCode === 32) { // Spacebar
+				$('#canvas').css('cursor', 'default');
+				// If we know what the previous tool was, return to it
+				if (globals.previousTool) {
+					globals.currentTool = globals.previousTool;
+					if (globals.currentTool === 'pen') {
+						penTool.activate();
+						updateActiveToolButton($('#pen_button')[0]);
+					} else if (globals.currentTool === 'polygon') {
+						polygonTool.activate();
+						updateActiveToolButton($('#polygon_button')[0]);
+					} else if (globals.currentTool === 'rectangle') {
+						rectangleTool.activate();
+						updateActiveToolButton($('#rectangle_button')[0]);
+					} else if (globals.currentTool === 'circle') {
+						circleTool.activate();
+						updateActiveToolButton($('#circle_button')[0]);
+					} else if (globals.currentTool === 'measure') {
+						measureTool.activate();
+						updateActiveToolButton($('#measure_button')[0]);
+					} else if (globals.currentTool === 'remove') {
+						removeTool.activate();
+						updateActiveToolButton($('#remove_button')[0]);
+					}
+				}
+			}
+		});
+		
+		// Add undo button functionality
+		$('#undo_button').click(function() {
+			undoLastOperation();
 		});
 		
 		// Navigation buttons
@@ -657,10 +1056,182 @@
 			loadImage('next');
 		});
 		
+		// Screenshot button click handler
+		$('#screenshot_button').click(function() {
+			takeScreenshot();
+		});
+		
+		// Function to take a screenshot
+		function takeScreenshot() {
+			try {
+				// Create a temporary canvas to draw the scene
+				const tempCanvas = document.createElement('canvas');
+				tempCanvas.width = paper.view.viewSize.width;
+				tempCanvas.height = paper.view.viewSize.height;
+				const tempCtx = tempCanvas.getContext('2d');
+				
+				// Draw background (white)
+				tempCtx.fillStyle = 'white';
+				tempCtx.fillRect(0, 0, tempCanvas.width, tempCanvas.height);
+				
+				// Get the canvas element that PaperJS is using
+				const canvas = document.getElementById('canvas');
+				
+				// Draw the PaperJS canvas to our temporary canvas
+				tempCtx.drawImage(canvas, 0, 0);
+				
+				// Create image 
+				const dataUrl = tempCanvas.toDataURL('image/png');
+				
+				// Create a link and trigger download
+				const link = document.createElement('a');
+				link.download = `${currentImage ? currentImage.name : 'screenshot'}_${new Date().getTime()}.png`;
+				link.href = dataUrl;
+				document.body.appendChild(link);
+				link.click();
+				document.body.removeChild(link);
+				
+				showSuccessMessage('Screenshot saved');
+			} catch (e) {
+				console.error('Error taking screenshot:', e);
+				showErrorMessage('Error taking screenshot: ' + e.message);
+			}
+		}
+		
+		// Function to save labels
+		function saveLabels() {
+			try {
+				// Check if there are any objects to save
+				let hasPathsToSave = false;
+				paper.project.activeLayer.children.forEach(function(child) {
+					if (child !== globals.raster && child !== globals.measurementPath) {
+						if (child.data && child.data.category) {
+							hasPathsToSave = true;
+						}
+					}
+				});
+				
+				if (!hasPathsToSave) {
+					showWarningMessage("No annotations to save. Create some annotations first.");
+					return;
+				}
+				
+				// Collect all drawn shapes into a GeoJSON-like structure
+				const features = [];
+				paper.project.activeLayer.children.forEach(function(child) {
+					// Skip the image and measurement
+					if (child === globals.raster || child === globals.measurementPath) {
+						return;
+					}
+					
+					// Skip items without category data
+					if (!child.data || !child.data.category) {
+						return;
+					}
+					
+					// Create a feature for each path
+					const feature = {
+						type: 'Feature',
+						geometry: {
+							type: getGeometryType(child),
+							coordinates: getCoordinates(child)
+						},
+						properties: {
+							category: child.data.category,
+							color: child.data.color,
+							createdAt: child.data.createdAt
+						}
+					};
+					
+					features.push(feature);
+				});
+				
+				// Create a GeoJSON structure
+				const geojson = {
+					type: 'FeatureCollection',
+					features: features,
+					metadata: {
+						image: currentImage ? currentImage.name : null,
+						imageWidth: paper.view.viewSize.width,
+						imageHeight: paper.view.viewSize.height,
+						timestamp: new Date().toISOString()
+					}
+				};
+				
+				// Show loading overlay
+				showLoadingOverlay();
+				
+				// Send to server
+				$.ajax({
+					url: "{% url 'save_labels' %}",
+					type: "POST",
+					contentType: 'application/json',
+					data: JSON.stringify(geojson),
+					success: function(response) {
+						hideLoadingOverlay();
+						showSuccessMessage("Labels saved successfully");
+					},
+					error: function(xhr, status, error) {
+						hideLoadingOverlay();
+						showErrorMessage("Error saving labels: " + error);
+						console.error("Save error details:", xhr.responseText);
+					}
+				});
+			} catch (e) {
+				hideLoadingOverlay();
+				console.error("Error preparing labels:", e);
+				showErrorMessage("Error preparing labels: " + e.message);
+			}
+		}
+		
+		// Helper functions for GeoJSON conversion
+		function getGeometryType(path) {
+			if (path instanceof paper.Path.Circle) {
+				return 'Point';
+			} else if (path.closed) {
+				return 'Polygon';
+			} else {
+				return 'LineString';
+			}
+		}
+		
+		function getCoordinates(path) {
+			if (path instanceof paper.Path.Circle) {
+				// For circles, use center as point
+				return [path.position.x, path.position.y];
+			} else if (path.closed) {
+				// For polygons, return array of point arrays including closure
+				const coords = [];
+				path.segments.forEach(function(segment) {
+					coords.push([segment.point.x, segment.point.y]);
+				});
+				// Close the ring by adding the first point again
+				if (coords.length > 0) {
+					coords.push([path.segments[0].point.x, path.segments[0].point.y]);
+				}
+				return [coords]; // GeoJSON polygons require an extra array level
+			} else {
+				// For lines, return array of point arrays
+				const coords = [];
+				path.segments.forEach(function(segment) {
+					coords.push([segment.point.x, segment.point.y]);
+				});
+				return coords;
+			}
+		}
+		
 		// Helper function to update active button
 		function updateActiveToolButton(button) {
+			// Store the previous tool before switching
+			if (globals.currentTool && globals.currentTool !== 'view') {
+				globals.previousTool = globals.currentTool;
+			}
+			
+			// Update the button states
 			$('.tool-buttons button').removeClass('active');
-			$(button).addClass('active');
+			if (button) {
+				$(button).addClass('active');
+			}
 		}
 		
 		// Function to show loading overlay
@@ -669,8 +1240,10 @@
 			if ($('#loading-overlay').length === 0) {
 				$('body').append(`
 					<div id="loading-overlay">
-						<div class="spinner"></div>
-						<div class="loading-text">Loading image...</div>
+						<div class="spinner-border" role="status">
+							<span class="sr-only">Loading...</span>
+						</div>
+						<div class="loading-text mt-2">Loading image...</div>
 					</div>
 				`);
 			} else {
@@ -685,20 +1258,20 @@
 		
 		// Function to clear the canvas
 		function clearCanvas() {
-			const canvas = document.getElementById('canvas');
-			if (canvas) {
-				const ctx = canvas.getContext('2d');
-				ctx.clearRect(0, 0, canvas.width, canvas.height);
-			}
+			// Clear the PaperJS project
+			paper.project.activeLayer.removeChildren();
 			
 			// Clear any active drawing states
 			isDrawing = false;
 			currentPath = [];
 			allPaths = [];
+			globals.path = null;
+			globals.undos = [];
+			globals.redos = [];
 			
 			// Reset any active tools
 			currentTool = null;
-			$(".tool-button").removeClass("active");
+			$(".tool-buttons button").removeClass("active");
 		}
 		
 		// Function to load image from server
@@ -795,6 +1368,9 @@
 			// Clear the canvas and existing shapes
 			clearCanvas();
 			
+			// Reset image loaded state
+			globals.imageLoaded = false;
+			
 			// Update the image information in the UI
 			$("#image_info_name").text("Image: " + imageName);
 			$("#image_info_dimensions").text("Dimensions: " + width + "x" + height);
@@ -848,9 +1424,35 @@
 					categoriesList.find("li").removeClass("active");
 					// Add active class to this item
 					$(this).addClass("active");
+					
+					// Store previous values
+					const previousCategory = currentCategory;
+					const previousColor = currentColor;
+					
 					// Set current category and color
 					currentCategory = categoryName;
 					currentColor = categoryColor;
+					
+					// If color changed and we have an active path, update its color
+					if (previousColor !== currentColor && globals.path) {
+						try {
+							globals.path.strokeColor = currentColor;
+							
+							// If the path has a fill color, update that too
+							if (globals.path.fillColor) {
+								globals.path.fillColor = new Color(currentColor);
+								globals.path.fillColor.alpha = 0.3;
+							}
+							
+							// Update the view
+							paper.view.update();
+						} catch (e) {
+							console.error('Error updating path color:', e);
+						}
+					}
+					
+					// Show feedback to user
+					showSuccessMessage(`Selected category: ${categoryName}`, 1000);
 				});
 				
 				// Add to the list
@@ -862,127 +1464,627 @@
 				categoriesList.find("li:first").addClass("active");
 				currentCategory = categories[0];
 				currentColor = colors[0];
+			} else {
+				// Handle no categories case
+				showWarningMessage("No categories available. Please add categories first.");
+				currentCategory = null;
+				currentColor = "#ff0000";
 			}
 		}
 		
-		// Function to draw the image on canvas
+		// Draw the image with proper error handling and state management
 		function drawImageOnCanvas(imagePath, width, height, rotation) {
-			const canvas = document.getElementById('canvas');
-			const ctx = canvas.getContext('2d');
+			// Set default canvas dimensions if they are not specified
+			width = width || 800;
+			height = height || 600;
 			
-			// Check if image path seems valid before trying to load
-			if (!imagePath || typeof imagePath !== 'string' || imagePath.trim() === '' || imagePath.endsWith('/')) {
-				console.error("Invalid image path:", imagePath);
-				showErrorMessage("Invalid image path. The URL appears to be a directory or is empty.");
+			try {
+				// Set up the view size and center
+				paper.view.viewSize = new paper.Size(width, height);
+				paper.view.center = new paper.Point(width / 2, height / 2);
 				
-				// Draw error message on canvas
-				canvas.width = width || 800;
-				canvas.height = height || 600;
-				ctx.fillStyle = "#f8d7da";
-				ctx.fillRect(0, 0, canvas.width, canvas.height);
-				ctx.font = "16px Arial";
-				ctx.fillStyle = "#721c24";
-				ctx.textAlign = "center";
-				ctx.fillText("Invalid Image Path", canvas.width/2, canvas.height/2 - 20);
-				ctx.font = "12px Arial"; 
-				ctx.fillText(imagePath || "No path provided", canvas.width/2, canvas.height/2 + 20);
+				// Store initial center for reset function
+				globals.initialCenter = paper.view.center.clone();
 				
-				hideLoadingOverlay();
-				return;
-			}
-			
-			// Set canvas dimensions
-			canvas.width = width;
-			canvas.height = height;
-			
-			// Create a new image
-			const img = new Image();
-			
-			// Set a 15-second timeout to catch hanging loads
-			const loadTimeout = setTimeout(() => {
-				if (!img.complete) {
+				// Reset zoom factor
+				globals.zoomFactor = 1;
+				updateZoomDisplay();
+				
+				// Show loading overlay
+				showLoadingOverlay();
+				
+				// Set a 15-second timeout to catch hanging loads
+				const loadTimeout = setTimeout(() => {
 					console.error("Image load timed out:", imagePath);
 					hideLoadingOverlay();
 					showErrorMessage(`Image load timed out. Check console for details.`);
+					globals.imageLoaded = false;
+				}, 15000);
+				
+				// Create a new raster
+				const raster = new paper.Raster({
+					source: imagePath,
+					position: paper.view.center,
+					crossOrigin: "anonymous" // Add crossOrigin directly to prevent CORS issues
+				});
+				
+				// Store the raster in globals for later reference
+				globals.raster = raster;
+				
+				// Handle successful load
+				raster.onLoad = function() {
+					// Clear the timeout as the image loaded successfully
+					clearTimeout(loadTimeout);
+					
+					// Center the raster
+					raster.position = paper.view.center;
+					
+					// Apply rotation if needed
+					if (rotation !== 0) {
+						raster.rotate(rotation);
+					}
+					
+					// Set image as loaded
+					globals.imageLoaded = true;
+					
+					// Hide loading overlay once image is loaded
+					hideLoadingOverlay();
+					console.log("Image loaded successfully:", imagePath);
+					
+					// Fit image to screen
+					fitImageToScreen();
+					
+					// Reset all tool states
+					cleanupActivePath();
+					
+					// Automatically detect grid after the image is loaded
+					setTimeout(() => {
+						// Call grid detection with the center of the image as the point
+						const imageCenter = raster.position;
+						startGridDetection(imageCenter);
+					}, 1000); // Add a slight delay to ensure the image is fully visible
+					
+					// Make sure to update the view
+					paper.view.update();
+				};
+				
+				// Handle load errors
+				raster.onError = function() {
+					// Clear the timeout as the image failed to load
+					clearTimeout(loadTimeout);
+					
+					console.error("Failed to load image:", imagePath);
+					hideLoadingOverlay();
+					
+					// Try to provide a more detailed error message
+					let errorDetail = "";
+					if (imagePath.indexOf('://') === -1) {
+						errorDetail = " URL may be missing protocol (http:// or https://).";
+					} else if (imagePath.endsWith('/')) {
+						errorDetail = " URL appears to be a directory, not a file.";
+					} else if (!imagePath.match(/\.(jpg|jpeg|png|gif|bmp|webp|tiff)$/i)) {
+						errorDetail = " URL might not point to an image file.";
+					} else {
+						errorDetail = " The server may be unreachable or the file may not exist.";
+					}
+					
+					showErrorMessage(`Failed to load image.${errorDetail} Path: ${imagePath}`);
+					
+					// Draw error message on canvas using PaperJS
+					paper.project.activeLayer.removeChildren();
+					
+					// Create a background
+					const background = new paper.Path.Rectangle({
+						point: [0, 0],
+						size: [width, height],
+						fillColor: '#f8d7da'
+					});
+					
+					// Create error text
+					const errorText = new paper.PointText({
+						point: new paper.Point(paper.view.center.x, paper.view.center.y - 20),
+						content: 'Image Failed to Load',
+						fillColor: '#721c24',
+						fontFamily: 'Arial',
+						fontSize: 16,
+						justification: 'center'
+					});
+					
+					const pathText = new paper.PointText({
+						point: new paper.Point(paper.view.center.x, paper.view.center.y + 20),
+						content: imagePath,
+						fillColor: '#721c24',
+						fontFamily: 'Arial',
+						fontSize: 12,
+						justification: 'center'
+					});
+					
+					const detailText = new paper.PointText({
+						point: new paper.Point(paper.view.center.x, paper.view.center.y + 40),
+						content: errorDetail,
+						fillColor: '#721c24',
+						fontFamily: 'Arial',
+						fontSize: 12,
+						justification: 'center'
+					});
+					
+					// Update the view
+					paper.view.update();
+				};
+				
+				// Set the crossOrigin for the raster
+				// Note: This can only be set for Image elements, not direct PaperJS rasters
+				// We need to manually set this on the underlying image
+				if (raster.image && !raster.image.complete) {
+					raster.image.crossOrigin = "anonymous";
 				}
-			}, 15000);
-			
-			img.onload = function() {
-				// Clear the timeout as the image loaded successfully
-				clearTimeout(loadTimeout);
 				
-				// Clear the canvas
-				ctx.clearRect(0, 0, canvas.width, canvas.height);
-				
-				// Save the current context state
-				ctx.save();
-				
-				// Move to the center of the canvas
-				ctx.translate(canvas.width / 2, canvas.height / 2);
-				
-				// Rotate if needed
-				if (rotation !== 0) {
-					ctx.rotate(rotation * Math.PI / 180);
-				}
-				
-				// Draw the image centered
-				ctx.drawImage(img, -canvas.width / 2, -canvas.height / 2, canvas.width, canvas.height);
-				
-				// Restore the context
-				ctx.restore();
-				
-				// Hide loading overlay once image is loaded
+				// Log the attempt to load the image
+				console.log("Attempting to load image:", imagePath);
+			} catch (e) {
+				console.error("Error in drawImageOnCanvas:", e);
 				hideLoadingOverlay();
-				console.log("Image loaded successfully:", imagePath);
-			};
-			
-			img.onerror = function(e) {
-				// Clear the timeout as the image failed to load
-				clearTimeout(loadTimeout);
-				
-				console.error("Failed to load image:", imagePath, e);
-				hideLoadingOverlay();
-				
-				// Try to provide a more detailed error message
-				let errorDetail = "";
-				if (imagePath.indexOf('://') === -1) {
-					errorDetail = " URL may be missing protocol (http:// or https://).";
-				} else if (imagePath.endsWith('/')) {
-					errorDetail = " URL appears to be a directory, not a file.";
-				} else if (!imagePath.match(/\.(jpg|jpeg|png|gif|bmp|webp|tiff)$/i)) {
-					errorDetail = " URL might not point to an image file.";
-				} else {
-					errorDetail = " The server may be unreachable or the file may not exist.";
-				}
-				
-				showErrorMessage(`Failed to load image.${errorDetail} Path: ${imagePath}`);
-				
-				// Draw error message on canvas
-				ctx.fillStyle = "#f8d7da";
-				ctx.fillRect(0, 0, canvas.width, canvas.height);
-				ctx.font = "16px Arial";
-				ctx.fillStyle = "#721c24";
-				ctx.textAlign = "center";
-				ctx.fillText("Image Failed to Load", canvas.width/2, canvas.height/2 - 20);
-				ctx.font = "12px Arial";
-				ctx.fillText(imagePath, canvas.width/2, canvas.height/2 + 20);
-				ctx.font = "12px Arial";
-				ctx.fillText(errorDetail, canvas.width/2, canvas.height/2 + 40);
-			};
-			
-			// Set crossOrigin to anonymous to prevent CORS issues with external image sources
-			img.crossOrigin = "anonymous";
-			
-			// Log the attempt to load the image
-			console.log("Attempting to load image:", imagePath);
-			
-			// Set the image source last, as this triggers the loading
-			img.src = imagePath;
+				showErrorMessage("Error drawing image: " + e.message);
+				globals.imageLoaded = false;
+			}
 		}
 		
 		// Start initial image loading
 		console.log("Initiating first image load from database...");
 		loadImage('next');
+
+		// Save button click handler
+		$('#save_button').click(function() {
+			saveLabels();
+		});
+		
+		// Clear button click handler
+		$('#clear_button').click(function() {
+			if (confirm('Are you sure you want to clear all annotations?')) {
+				clearAnnotations();
+			}
+		});
+		
+		// Function to clear all annotations
+		function clearAnnotations() {
+			// Remove all paths except the image
+			paper.project.activeLayer.children.forEach(function(child) {
+				if (child !== globals.raster) {
+					child.remove();
+				}
+			});
+			
+			// Clear undo/redo stacks
+			globals.undos = [];
+			globals.redos = [];
+			
+			// Update view
+			paper.view.update();
+			
+			showSuccessMessage("All annotations cleared");
+		}
+
+		// Zoom control buttons
+		$('#zoom-in').click(function() {
+			if (globals.raster && globals.imageLoaded) {
+				// Zoom in by 20% relative to the image center
+				const newZoom = globals.zoomFactor * 1.2;
+				if (newZoom <= 10) {  // Maintain max zoom limit of 1000%
+					globals.zoomFactor = newZoom;
+					paper.view.zoom = newZoom;
+					paper.view.center = globals.raster.position;
+					updateZoomDisplay();
+				}
+			} else {
+				zoomView(1.2); // Use original zoom method if no image
+			}
+		});
+		
+		$('#zoom-out').click(function() {
+			if (globals.raster && globals.imageLoaded) {
+				// Zoom out by 20% relative to the image center
+				const newZoom = globals.zoomFactor * 0.8;
+				if (newZoom >= 0.1) {  // Maintain min zoom limit of 10%
+					globals.zoomFactor = newZoom;
+					paper.view.zoom = newZoom;
+					paper.view.center = globals.raster.position;
+					updateZoomDisplay();
+				}
+			} else {
+				zoomView(0.8); // Use original zoom method if no image
+			}
+		});
+		
+		$('#zoom-fit').click(function() {
+			fitImageToScreen();
+		});
+		
+		$('#zoom-reset').click(function() {
+			resetZoom();
+		});
+		
+		// Initialize view controls for zooming and panning
+		function initializeViewControls() {
+			// Create a view tool for panning
+			const viewTool = new paper.Tool();
+			
+			// Store this tool in globals so we can activate it later
+			globals.viewTool = viewTool;
+			
+			// Add event handler for mouse wheel zooming
+			$('#canvas').on('wheel', function(event) {
+				event.preventDefault();
+				
+				// Determine zoom direction and factor
+				const zoomFactor = event.originalEvent.deltaY < 0 ? 1.1 : 0.9;
+				
+				// Use centered zoom instead of zooming at mouse position
+				zoomView(zoomFactor);
+			});
+			
+			// Add event handlers for panning with mouse drag
+			viewTool.onMouseDown = function(event) {
+				// Only allow panning when view tool is active
+				globals.isDragging = true;
+				globals.lastPoint = event.point.clone();
+				
+				// Change cursor to indicate panning
+				$('#canvas').css('cursor', 'grab');
+			};
+			
+			viewTool.onMouseDrag = function(event) {
+				if (globals.isDragging) {
+					// Calculate the difference and apply to view center
+					const delta = event.point.subtract(globals.lastPoint);
+					paper.view.center = paper.view.center.subtract(delta);
+					globals.lastPoint = event.point.clone();
+					
+					// Change cursor to indicate active panning
+					$('#canvas').css('cursor', 'grabbing');
+				}
+			};
+			
+			viewTool.onMouseUp = function(event) {
+				globals.isDragging = false;
+				
+				// Reset cursor
+				$('#canvas').css('cursor', 'default');
+			};
+		}
+		
+		// Function to zoom around a specific point
+		function zoomAtPoint(point, factor) {
+			// Check if we have a raster (image) loaded
+			if (globals.raster && globals.imageLoaded) {
+				// Always zoom with respect to the center of the image
+				const imageCenter = globals.raster.position;
+				
+				// Update zoom factor
+				globals.zoomFactor *= factor;
+				
+				// Limit zoom range (between 10% and 1000%)
+				globals.zoomFactor = Math.max(0.1, Math.min(globals.zoomFactor, 10));
+				
+				// Update zoom display
+				updateZoomDisplay();
+				
+				// Apply zoom
+				paper.view.zoom *= factor;
+				
+				// Keep image centered
+				paper.view.center = imageCenter;
+				
+				// Update the view
+				paper.view.update();
+			} else {
+				// If no image is loaded, use the standard zoom behavior
+				// Convert point from view space to project space
+				const viewPoint = paper.view.viewToProject(point);
+				
+				// Update zoom factor
+				globals.zoomFactor *= factor;
+				
+				// Limit zoom range (between 10% and 1000%)
+				globals.zoomFactor = Math.max(0.1, Math.min(globals.zoomFactor, 10));
+				
+				// Update zoom display
+				updateZoomDisplay();
+				
+				// Calculate new zoom center
+				const beta = paper.view.zoom / (paper.view.zoom * factor);
+				const pc = viewPoint.subtract(paper.view.center);
+				const offset = viewPoint.subtract(pc.multiply(beta)).subtract(paper.view.center);
+				
+				// Apply zoom and pan
+				paper.view.zoom *= factor;
+				paper.view.center = paper.view.center.add(offset);
+				
+				// Update the view
+				paper.view.update();
+			}
+		}
+		
+		// Function to zoom the view (centered)
+		function zoomView(factor) {
+			// Update zoom factor
+			globals.zoomFactor *= factor;
+			
+			// Limit zoom range (between 10% and 1000%)
+			globals.zoomFactor = Math.max(0.1, Math.min(globals.zoomFactor, 10));
+			
+			// Update zoom display
+			updateZoomDisplay();
+			
+			// If image is loaded, zoom relative to image center
+			if (globals.raster) {
+				// Apply zoom
+				paper.view.zoom *= factor;
+				
+				// Keep image centered
+				paper.view.center = globals.raster.position;
+			} else {
+				// Apply zoom to current view center
+				paper.view.zoom *= factor;
+			}
+			
+			// Update the view
+			paper.view.update();
+		}
+		
+		// Function to update zoom level display
+		function updateZoomDisplay() {
+			const percentage = Math.round(globals.zoomFactor * 100);
+			$('#zoom-level').text(`${percentage}%`);
+		}
+		
+		// Function to reset zoom to 100%
+		function resetZoom() {
+			// Calculate the factor needed to return to 100%
+			const factor = 1 / globals.zoomFactor;
+			
+			// Reset the zoom factor
+			globals.zoomFactor = 1;
+			
+			// Update zoom display
+			updateZoomDisplay();
+			
+			// Reset view center to initial center
+			paper.view.center = globals.initialCenter.clone();
+			
+			// Apply zoom
+			paper.view.zoom = 1;
+			
+			// Update the view
+			paper.view.update();
+		}
+		
+		// Function to fit image to screen
+		function fitImageToScreen() {
+			if (!globals.raster) return;
+			
+			// Get canvas container dimensions
+			const containerWidth = $('#canvasContainer').width();
+			const containerHeight = $('#canvasContainer').height();
+			
+			// Calculate the scale factors needed to fit the image
+			const scaleX = containerWidth / globals.raster.width;
+			const scaleY = containerHeight / globals.raster.height;
+			
+			// Use the smaller scale factor to ensure the entire image fits
+			const scale = Math.min(scaleX, scaleY) * 0.9; // Add a 10% margin
+			
+			// Calculate the zoom factor relative to current zoom
+			const zoomFactor = scale / paper.view.zoom;
+			
+			// Update the global zoom factor
+			globals.zoomFactor = scale;
+			
+			// Update zoom display
+			updateZoomDisplay();
+			
+			// Center the image
+			paper.view.center = globals.raster.position;
+			
+			// Apply the zoom
+			paper.view.zoom = scale;
+			
+			// Update the view
+			paper.view.update();
+		}
+
+		// Add the grid detection function with better error handling and visual feedback
+		function startGridDetection(point) {
+			// Show loading overlay
+			showLoadingOverlay("Detecting grid...");
+			
+			// Get current image data
+			const imageData = {
+				name: currentImage ? currentImage.name : null,
+				path: currentImage ? currentImage.path : null,
+				point: {
+					x: Math.round(point.x),
+					y: Math.round(point.y)
+				}
+			};
+			
+			console.log('Starting grid detection at point:', point);
+			
+			// We no longer need the click indicator since it's automatic
+			// Just call the backend directly
+			
+			// Call to backend for grid detection
+			$.ajax({
+				url: "{% url 'detect_grid' %}",
+				type: "POST",
+				contentType: 'application/json',
+				data: JSON.stringify(imageData),
+				success: function(response) {
+					hideLoadingOverlay();
+					
+					if (response.success) {
+						// Render the detected grid
+						renderDetectedGrid(response.grid);
+						// Add the success message back that was removed
+						showSuccessMessage(`Grid detected automatically (Confidence: ${Math.round(response.grid.metrics.confidence * 100)}%)`);
+						
+						// Log detailed metrics for debugging
+						console.log('Grid detection metrics:', response.grid.metrics);
+					} else {
+						// Show proper error message to user
+						let errorMsg = response.message || "Automatic grid detection failed";
+						showErrorMessage(errorMsg);
+					}
+				},
+				error: function(xhr, status, error) {
+					hideLoadingOverlay();
+					
+					// Show detailed error
+					let errorMessage = "Error in automatic grid detection";
+					try {
+						const response = JSON.parse(xhr.responseText);
+						if (response && response.message) {
+							errorMessage = `Grid detection error: ${response.message}`;
+						}
+					} catch (e) {
+						errorMessage = `Grid detection error: ${error || xhr.statusText}`;
+					}
+					
+					showErrorMessage(errorMessage);
+					console.error("Grid detection error details:", xhr.responseText);
+				}
+			});
+		}
+
+		// Improved function to render the detected grid with visual enhancements
+		function renderDetectedGrid(gridData) {
+			// Create a group for all grid elements
+			const gridGroup = new paper.Group();
+			
+			// Set group data for identification and undo
+			gridGroup.data = {
+				type: 'grid',
+				category: currentCategory,
+				color: currentColor,
+				createdAt: new Date().getTime()
+			};
+			
+			// Draw grid lines with improved styling
+			if (gridData.lines) {
+				// Create separate groups for horizontal and vertical lines
+				const hLinesGroup = new paper.Group();
+				const vLinesGroup = new paper.Group();
+				
+				gridData.lines.forEach(line => {
+					const start = new paper.Point(line.start.x, line.start.y);
+					const end = new paper.Point(line.end.x, line.end.y);
+					
+					// Determine if line is horizontal or vertical
+					const isHorizontal = Math.abs(end.y - start.y) < Math.abs(end.x - start.x);
+					
+					const gridLine = new paper.Path.Line(start, end);
+					
+					gridLine.strokeColor = currentColor;
+					gridLine.strokeWidth = 1;
+					gridLine.dashArray = [5, 5];
+					
+					// Add to appropriate group
+					if (isHorizontal) {
+						hLinesGroup.addChild(gridLine);
+					} else {
+						vLinesGroup.addChild(gridLine);
+					}
+				});
+				
+				// Add line groups to main grid group
+				gridGroup.addChild(hLinesGroup);
+				gridGroup.addChild(vLinesGroup);
+			}
+			
+			// Draw grid intersections with improved styling
+			if (gridData.intersections) {
+				const intersectionsGroup = new paper.Group();
+				
+				gridData.intersections.forEach(point => {
+					const intersection = new paper.Path.Circle({
+						center: new paper.Point(point.x, point.y),
+						radius: 3,
+						fillColor: currentColor
+					});
+					
+					intersectionsGroup.addChild(intersection);
+				});
+				
+				// Add intersections to grid group
+				gridGroup.addChild(intersectionsGroup);
+			}
+			
+			// Add the entire grid group to undo stack
+			addToUndoStack(gridGroup);
+			
+			// Update canvas
+			paper.view.update();
+			
+			// Display grid metrics
+			if (gridData.metrics) {
+				// Format metrics message
+				let metricsText = "Grid Metrics:\n";
+				metricsText += `Cell Width: ${Math.round(gridData.metrics.cellWidth)}px\n`;
+				metricsText += `Cell Height: ${Math.round(gridData.metrics.cellHeight)}px\n`;
+				metricsText += `Rotation: ${gridData.metrics.rotation.toFixed(1)}°\n`;
+				metricsText += `Confidence: ${(gridData.metrics.confidence * 100).toFixed(0)}%`;
+				
+				if (gridData.metrics.algorithm) {
+					metricsText += `\nMethod: ${gridData.metrics.algorithm}`;
+				}
+				
+				// Create floating metrics display that fades out
+				const metricsPoint = new paper.Point(
+					paper.view.center.x, 
+					paper.view.bounds.y + 100
+				);
+				
+				const metricsDisplay = new paper.PointText({
+					point: metricsPoint,
+					content: metricsText,
+					fillColor: 'black',
+					backgroundColor: new paper.Color(1, 1, 1, 0.7),
+					fontSize: 14,
+					fontFamily: 'monospace',
+					justification: 'center'
+				});
+				
+				// Add background for better readability
+				const padding = 10;
+				const background = new paper.Path.Rectangle({
+					rectangle: metricsDisplay.bounds.expand(padding),
+					fillColor: new paper.Color(1, 1, 1, 0.7),
+					strokeColor: currentColor,
+					strokeWidth: 1
+				});
+				
+				// Ensure background is behind text
+				background.sendToBack();
+				
+				// Add to a temporary group
+				const metricsGroup = new paper.Group([background, metricsDisplay]);
+				
+				// Fade out and remove after delay
+				setTimeout(() => {
+					const fadeInterval = setInterval(() => {
+						if (metricsGroup.opacity > 0.05) {
+							metricsGroup.opacity -= 0.05;
+						} else {
+							clearInterval(fadeInterval);
+							metricsGroup.remove();
+						}
+						paper.view.update();
+					}, 100);
+				}, 5000);
+				
+				// Also show as a notification for longer visibility
+				showSuccessMessage(metricsText, 10000);
+			}
+		}
 	});
 
 	// Function to show error, success, or warning messages to user
