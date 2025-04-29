@@ -103,26 +103,33 @@
 		gap: 10px;
 	}
 
-	/* Measurement tools */
+	/* Measurement tools - Updated for architectural blueprint style */
 	.measurement-info {
 		position: absolute;
 		z-index: 100;
-		background: rgba(255, 255, 255, 0.8);
-		border: 1px solid #ddd;
+		background: rgba(240, 248, 255, 0.9);
+		border: 1px solid #1E54A7;
 		padding: 5px 10px;
-		border-radius: 4px;
+		border-radius: 0;
 		font-size: 12px;
 		display: none;
+		color: #1E54A7;
+		font-family: 'Arial', sans-serif;
+		box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
 	}
 
 	.measurement-label {
-		background: rgba(255, 255, 255, 0.8);
-		border: 1px solid #ddd;
-		border-radius: 4px;
-		padding: 2px 6px;
-		font-family: monospace;
-		font-size: 11px;
+		background: rgba(240, 248, 255, 0.9);
+		border: 1px solid #1E54A7;
+		border-radius: 0;
+		padding: 4px 8px;
+		font-family: 'Courier New', monospace;
+		font-size: 12px;
+		color: #1E54A7;
+		font-weight: 600;
+		letter-spacing: 0.5px;
 		pointer-events: none;
+		box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
 	}
 
 	/* Add CSS for loading indicator */
@@ -539,7 +546,32 @@
 		imageLoaded: false, // Track if image is fully loaded before enabling tools
 		isDrawing: false, // Track active drawing state
 		gridMetrics: null, // Store grid metrics for measurements
-		savedMeasurements: [] // Array to store saved measurements
+		savedMeasurements: [], // Array to store saved measurements
+		// Blueprint styling constants
+		blueprintStyle: {
+			measureLine: {
+				color: '#57ACDC',  // Sky blue color for better visibility
+				width: 2.5,        // Thicker lines
+				dashArray: [6, 4]  // Adjusted dash pattern
+			},
+			measureText: {
+				fontFamily: 'Courier New, monospace',
+				fontSize: 12,
+				fontWeight: 'bold',
+				color: '#1E54A7',
+				backgroundColor: new Color(0.94, 0.97, 1, 0.9)
+			},
+			dimension: {
+				lineColor: '#57ACDC',  // Sky blue color for better visibility
+				textColor: '#1E54A7',
+				arrowSize: 6,
+				endpointRadius: 3.5,   // Size of endpoint markers
+				endpointStyle: 'crosshair' // 'crosshair' or 'dot'
+			},
+			shapes: {
+				fillColor: new Color(1, 1, 0.7, 0.25) // Light yellow with high transparency
+			}
+		}
 	};
 
 	// Variable declarations
@@ -610,26 +642,30 @@
 				globals.isMeasuring = true;
 				globals.measureStartPoint = event.point;
 				
-				// Create measurement line
+				// Create measurement line with blueprint style
 				globals.measurementPath = new paper.Path.Line(event.point, event.point);
-				globals.measurementPath.strokeColor = 'red';
-				globals.measurementPath.strokeWidth = 2;
-				globals.measurementPath.dashArray = [5, 5];
+				globals.measurementPath.strokeColor = globals.blueprintStyle.measureLine.color;
+				globals.measurementPath.strokeWidth = globals.blueprintStyle.measureLine.width;
+				globals.measurementPath.dashArray = globals.blueprintStyle.measureLine.dashArray;
 				
-				// Create measurement text
+				// Add a dot at the start point
+				const startDot = createEndpointMarker(event.point, globals.blueprintStyle.dimension.endpointStyle);
+				
+				// Create measurement text with blueprint style
 				globals.measurementText = new paper.PointText({
 					point: event.point.add(new paper.Point(10, 10)),
 					content: "0px",
-					fillColor: 'black',
-					fontSize: 12,
-					fontFamily: 'monospace'
+					fillColor: globals.blueprintStyle.measureText.color,
+					fontSize: globals.blueprintStyle.measureText.fontSize,
+					fontFamily: globals.blueprintStyle.measureText.fontFamily,
+					fontWeight: globals.blueprintStyle.measureText.fontWeight
 				});
 				
 				// Create background rectangle for the text
 				const textBackground = new paper.Path.Rectangle({
 					rectangle: globals.measurementText.bounds.expand(5),
-					fillColor: new paper.Color(1, 1, 1, 0.8),
-					strokeColor: 'red',
+					fillColor: globals.blueprintStyle.measureText.backgroundColor,
+					strokeColor: globals.blueprintStyle.measureLine.color,
 					strokeWidth: 1
 				});
 				
@@ -637,7 +673,7 @@
 				textBackground.sendToBack();
 				
 				// Group the text and background for easier manipulation
-				globals.tempGroup = new paper.Group([textBackground, globals.measurementText]);
+				globals.tempGroup = new paper.Group([textBackground, globals.measurementText, startDot]);
 				
 				// Show measurement info
 				$('#measurementInfo').show().css({
@@ -670,53 +706,18 @@
 						// Convert pixel distance to meters
 						metricDistance = pixelDistance / pixelsPerMeter;
 						
-						// Convert meters to inches (1 meter = 39.3701 inches)
-						imperialDistance = metricDistance * 39.3701;
+						// Convert meters to imperial (feet and inches)
+						imperialDistance = metricDistance * 3.28084; // 1 meter = 3.28084 feet
 					}
 					
-					// Create a formatted permanent label
-					let labelText = `${Math.round(pixelDistance)}px`;
-					if (metricDistance !== null) {
-						if (metricDistance < 1) {
-							// Show in cm if less than 1 meter
-							labelText += ` / ${Math.round(metricDistance * 100)}cm`;
-						} else {
-							labelText += ` / ${metricDistance.toFixed(2)}m`;
-						}
-						labelText += ` / ${imperialDistance.toFixed(2)}in`;
-					}
+					// Format measurements in a more professional way
+					let labelText = formatMeasurementText(pixelDistance, metricDistance, imperialDistance);
 					
-					// Create a permanent line
-					const finalPath = new paper.Path.Line(startPoint, endPoint);
-					finalPath.strokeColor = 'red';
-					finalPath.strokeWidth = 2;
-					finalPath.dashArray = [5, 5];
-					
-					// Create permanent text
-					const finalText = new paper.PointText({
-						point: endPoint.add(new paper.Point(10, -10)),
-						content: labelText,
-						fillColor: 'black',
-						fontSize: 12,
-						fontFamily: 'monospace'
-					});
-					
-					// Create background rectangle for text
-					const finalBackground = new paper.Path.Rectangle({
-						rectangle: finalText.bounds.expand(5),
-						fillColor: new paper.Color(1, 1, 1, 0.8),
-						strokeColor: 'red',
-						strokeWidth: 1
-					});
-					
-					// Ensure background is behind text
-					finalBackground.sendToBack();
-					
-					// Group the measurement elements
-					const measurementGroup = new paper.Group([finalPath, finalBackground, finalText]);
+					// Create dimension line with arrows for architectural style
+					const dimensionGroup = createArchitecturalDimension(startPoint, endPoint, labelText);
 					
 					// Add metadata for undo functionality
-					measurementGroup.data = {
+					dimensionGroup.data = {
 						type: 'measurement',
 						pixelDistance: pixelDistance,
 						metricDistance: metricDistance,
@@ -727,10 +728,10 @@
 					};
 					
 					// Add to undo stack
-					addToUndoStack(measurementGroup);
+					addToUndoStack(dimensionGroup);
 					
 					// Add to saved measurements array
-					globals.savedMeasurements.push(measurementGroup);
+					globals.savedMeasurements.push(dimensionGroup);
 					
 					// Show success message
 					showSuccessMessage("Measurement saved");
@@ -770,73 +771,88 @@
 				const rounded = Math.round(pixelDistance * 100) / 100;
 				
 				// Get the real-world distances if grid metrics exist
-				let metricText = "";
-				let imperialText = "";
+				let metricDistance = null;
+				let imperialDistance = null;
 				
 				if (globals.gridMetrics && globals.gridMetrics.realWorldScale) {
 					// Get pixels per meter from grid metrics
 					const pixelsPerMeter = globals.gridMetrics.cellWidth / globals.gridMetrics.realWorldScale.width;
 					
 					// Convert pixel distance to meters
-					const metricDistance = pixelDistance / pixelsPerMeter;
+					metricDistance = pixelDistance / pixelsPerMeter;
 					
-					// Convert meters to inches (1 meter = 39.3701 inches)
-					const imperialDistance = metricDistance * 39.3701;
+					// Convert meters to imperial (feet and inches)
+					imperialDistance = metricDistance * 3.28084; // 1 meter = 3.28084 feet
 					
-					// Format metric distance
-					if (metricDistance < 1) {
-						// Show in cm if less than 1 meter
-						metricText = ` / ${Math.round(metricDistance * 100)}cm`;
-					} else {
-						metricText = ` / ${metricDistance.toFixed(2)}m`;
-					}
-					
-					// Format imperial distance
-					imperialText = ` / ${imperialDistance.toFixed(2)}in`;
+					// Format for display in status bar
+					const metricText = formatMetricText(metricDistance);
+					const imperialText = formatImperialText(imperialDistance);
 					
 					// Update footer display
-					$('#measure-distance').text(`Distance: ${rounded}px${metricText}${imperialText}`);
+					$('#measure-distance').text(`Distance: ${rounded}px | ${metricText} | ${imperialText}`);
+					
+					// Update the display text for the measurement label
+					if (globals.measurementText) {
+						globals.measurementText.content = formatMeasurementText(rounded, metricDistance, imperialDistance);
+						
+						// Update the background rectangle
+						if (globals.tempGroup && globals.tempGroup.children.length > 1) {
+							const background = globals.tempGroup.children[0];
+							background.remove();
+							
+							// Create new background
+							const newBackground = new paper.Path.Rectangle({
+								rectangle: globals.measurementText.bounds.expand(5),
+								fillColor: globals.blueprintStyle.measureText.backgroundColor,
+								strokeColor: globals.blueprintStyle.measureLine.color,
+								strokeWidth: 1
+							});
+							
+							// Add back to group and send to back
+							globals.tempGroup.insertChild(0, newBackground);
+						}
+						
+						// Position the text at the midpoint of the line
+						const midpoint = globals.measureStartPoint.add(event.point).divide(2);
+						globals.tempGroup.position = midpoint.add(new paper.Point(0, -15));
+					}
+					
+					// Update measurement info tooltip
+					let infoText = `Start: ${Math.round(globals.measureStartPoint.x)},${Math.round(globals.measureStartPoint.y)} | End: ${x},${y} | ${metricText} | ${imperialText}`;
+					
+					$('#measurementInfo').text(infoText);
 				} else {
 					// Just show pixels if no grid metrics
 					$('#measure-distance').text(`Distance: ${rounded}px`);
-				}
-				
-				// Update the display text
-				if (globals.measurementText) {
-					let displayText = `${rounded}px`;
-					if (metricText) displayText += metricText;
-					if (imperialText) displayText += imperialText;
 					
-					globals.measurementText.content = displayText;
-					
-					// Update the background rectangle
-					if (globals.tempGroup && globals.tempGroup.children.length > 1) {
-						const background = globals.tempGroup.children[0];
-						background.remove();
+					if (globals.measurementText) {
+						globals.measurementText.content = `${rounded}px`;
 						
-						// Create new background
-						const newBackground = new paper.Path.Rectangle({
-							rectangle: globals.measurementText.bounds.expand(5),
-							fillColor: new paper.Color(1, 1, 1, 0.8),
-							strokeColor: 'red',
-							strokeWidth: 1
-						});
+						// Update the background rectangle
+						if (globals.tempGroup && globals.tempGroup.children.length > 1) {
+							const background = globals.tempGroup.children[0];
+							background.remove();
+							
+							// Create new background
+							const newBackground = new paper.Path.Rectangle({
+								rectangle: globals.measurementText.bounds.expand(5),
+								fillColor: globals.blueprintStyle.measureText.backgroundColor, 
+								strokeColor: globals.blueprintStyle.measureLine.color,
+								strokeWidth: 1
+							});
+							
+							// Add back to group and send to back
+							globals.tempGroup.insertChild(0, newBackground);
+						}
 						
-						// Add back to group and send to back
-						globals.tempGroup.insertChild(0, newBackground);
+						// Position the text at the midpoint of the line
+						const midpoint = globals.measureStartPoint.add(event.point).divide(2);
+						globals.tempGroup.position = midpoint.add(new paper.Point(0, -15));
 					}
 					
-					// Position the text at the midpoint of the line
-					const midpoint = globals.measureStartPoint.add(event.point).divide(2);
-					globals.tempGroup.position = midpoint.add(new paper.Point(0, -15));
+					// Update measurement info tooltip
+					$('#measurementInfo').text(`Start: ${Math.round(globals.measureStartPoint.x)},${Math.round(globals.measureStartPoint.y)} | End: ${x},${y} | Distance: ${rounded}px`);
 				}
-				
-				// Update measurement info tooltip
-				let infoText = `Start: ${Math.round(globals.measureStartPoint.x)},${Math.round(globals.measureStartPoint.y)} | End: ${x},${y} | Distance: ${rounded}px`;
-				if (metricText) infoText += metricText;
-				if (imperialText) infoText += imperialText;
-				
-				$('#measurementInfo').text(infoText);
 				
 				// Position the info box
 				$('#measurementInfo').css({
@@ -868,6 +884,223 @@
 		};
 		
 		return measureTool;
+	}
+
+	// Helper function to format metric text
+	function formatMetricText(metricDistance) {
+		if (metricDistance === null) return "";
+		
+		if (metricDistance < 0.01) {
+			// Show in mm if very small
+			return `${Math.round(metricDistance * 1000)}mm`;
+		} else if (metricDistance < 1) {
+			// Show in cm if less than 1 meter
+			return `${Math.round(metricDistance * 100)}cm`;
+		} else {
+			// Show in meters with appropriate precision
+			return `${metricDistance.toFixed(2)}m`;
+		}
+	}
+
+	// Helper function to format imperial text with feet and inches
+	function formatImperialText(feet) {
+		if (feet === null) return "";
+		
+		const wholeFeet = Math.floor(feet);
+		const inches = Math.round((feet - wholeFeet) * 12);
+		
+		if (inches === 12) {
+			// Handle case where inches rounds up to 12
+			return `${wholeFeet + 1}'0"`;
+		} else if (wholeFeet === 0) {
+			// Just show inches if less than a foot
+			return `${inches}"`;
+		} else {
+			return `${wholeFeet}'${inches}"`;
+		}
+	}
+	
+	// Helper function to format the complete measurement text
+	function formatMeasurementText(pixelDistance, metricDistance, imperialDistance) {
+		let text = "";
+		
+		// Always include pixel measurement
+		text += `${Math.round(pixelDistance)}px`;
+		
+		// Add metric and imperial if available
+		if (metricDistance !== null) {
+			text += ` | ${formatMetricText(metricDistance)}`;
+		}
+		
+		if (imperialDistance !== null) {
+			text += ` | ${formatImperialText(imperialDistance)}`;
+		}
+		
+		return text;
+	}
+	
+	// Function to create architectural dimension with arrows and extension lines
+	function createArchitecturalDimension(startPoint, endPoint, labelText) {
+		const dimensionGroup = new paper.Group();
+		
+		// Calculate vector properties
+		const vector = endPoint.subtract(startPoint);
+		const length = vector.length;
+		const direction = vector.normalize();
+		const perpendicular = new paper.Point(-direction.y, direction.x);
+		
+		// Create offset for extension lines (perpendicular to measurement line)
+		const extensionOffset = perpendicular.multiply(10);
+		const textOffset = perpendicular.multiply(18);
+		
+		// Calculate extension line endpoints
+		const extensionStart1 = startPoint.subtract(extensionOffset.multiply(0.5));
+		const extensionEnd1 = startPoint.add(extensionOffset);
+		
+		const extensionStart2 = endPoint.subtract(extensionOffset.multiply(0.5));
+		const extensionEnd2 = endPoint.add(extensionOffset);
+		
+		// Create extension lines
+		const extensionLine1 = new paper.Path.Line(extensionStart1, extensionEnd1);
+		const extensionLine2 = new paper.Path.Line(extensionStart2, extensionEnd2);
+		
+		extensionLine1.strokeColor = globals.blueprintStyle.dimension.lineColor;
+		extensionLine1.strokeWidth = 1;
+		
+		extensionLine2.strokeColor = globals.blueprintStyle.dimension.lineColor;
+		extensionLine2.strokeWidth = 1;
+		
+		// Create dimension line with arrow heads
+		const arrowSize = globals.blueprintStyle.dimension.arrowSize;
+		
+		// Calculate dimension line offset
+		const dimensionStart = startPoint.add(extensionOffset);
+		const dimensionEnd = endPoint.add(extensionOffset);
+		
+		// Create main dimension line
+		const dimensionLine = new paper.Path.Line(dimensionStart, dimensionEnd);
+		dimensionLine.strokeColor = globals.blueprintStyle.dimension.lineColor;
+		dimensionLine.strokeWidth = globals.blueprintStyle.measureLine.width;
+		dimensionLine.dashArray = globals.blueprintStyle.measureLine.dashArray;
+		
+		// Create arrow heads
+		const arrowHead1 = createArrowHead(dimensionStart, direction, arrowSize);
+		const arrowHead2 = createArrowHead(dimensionEnd, direction.multiply(-1), arrowSize);
+		
+		arrowHead1.fillColor = globals.blueprintStyle.dimension.lineColor;
+		arrowHead2.fillColor = globals.blueprintStyle.dimension.lineColor;
+		
+		// Add endpoint markers to the actual measured points (not the dimension line)
+		const startMarker = createEndpointMarker(startPoint, globals.blueprintStyle.dimension.endpointStyle);
+		const endMarker = createEndpointMarker(endPoint, globals.blueprintStyle.dimension.endpointStyle);
+		
+		// Create text for measurement
+		const textPoint = startPoint.add(vector.divide(2)).add(textOffset);
+		
+		const dimensionText = new paper.PointText({
+			point: textPoint,
+			content: labelText,
+			fillColor: globals.blueprintStyle.dimension.textColor,
+			fontSize: globals.blueprintStyle.measureText.fontSize,
+			fontFamily: globals.blueprintStyle.measureText.fontFamily,
+			fontWeight: globals.blueprintStyle.measureText.fontWeight,
+			justification: 'center'
+		});
+		
+		// Add background for text
+		const textBackground = new paper.Path.Rectangle({
+			rectangle: dimensionText.bounds.expand(5),
+			fillColor: globals.blueprintStyle.measureText.backgroundColor,
+			strokeColor: globals.blueprintStyle.dimension.lineColor,
+			strokeWidth: 1
+		});
+		
+		textBackground.sendToBack();
+		
+		// Create direct measure line (actual measured distance)
+		const directLine = new paper.Path.Line(startPoint, endPoint);
+		directLine.strokeColor = globals.blueprintStyle.dimension.lineColor;
+		directLine.strokeWidth = globals.blueprintStyle.measureLine.width * 0.7;
+		directLine.dashArray = globals.blueprintStyle.measureLine.dashArray;
+		directLine.opacity = 0.6;
+		
+		// Add all elements to the group
+		dimensionGroup.addChild(directLine);
+		dimensionGroup.addChild(extensionLine1);
+		dimensionGroup.addChild(extensionLine2);
+		dimensionGroup.addChild(dimensionLine);
+		dimensionGroup.addChild(arrowHead1);
+		dimensionGroup.addChild(arrowHead2);
+		dimensionGroup.addChild(startMarker);
+		dimensionGroup.addChild(endMarker);
+		dimensionGroup.addChild(textBackground);
+		dimensionGroup.addChild(dimensionText);
+		
+		return dimensionGroup;
+	}
+	
+	// Helper function to create endpoint markers (crosshairs or dots)
+	function createEndpointMarker(point, style) {
+		const radius = globals.blueprintStyle.dimension.endpointRadius;
+		const color = globals.blueprintStyle.dimension.lineColor;
+		
+		if (style === 'dot') {
+			// Create a dot
+			const dot = new paper.Path.Circle({
+				center: point,
+				radius: radius,
+				fillColor: color
+			});
+			return dot;
+		} else {
+			// Create a crosshair
+			const crosshair = new paper.Group();
+			
+			// Horizontal line
+			const hLine = new paper.Path.Line(
+				point.subtract(new paper.Point(radius, 0)),
+				point.add(new paper.Point(radius, 0))
+			);
+			hLine.strokeColor = color;
+			hLine.strokeWidth = 1.5;
+			
+			// Vertical line
+			const vLine = new paper.Path.Line(
+				point.subtract(new paper.Point(0, radius)),
+				point.add(new paper.Point(0, radius))
+			);
+			vLine.strokeColor = color;
+			vLine.strokeWidth = 1.5;
+			
+			// Add a small circle in the center
+			const centerDot = new paper.Path.Circle({
+				center: point,
+				radius: radius / 3,
+				fillColor: color
+			});
+			
+			crosshair.addChild(hLine);
+			crosshair.addChild(vLine);
+			crosshair.addChild(centerDot);
+			
+			return crosshair;
+		}
+	}
+	
+	// Helper function to create arrow head
+	function createArrowHead(point, direction, size) {
+		const perpendicular = new paper.Point(-direction.y, direction.x);
+		
+		const tip = point.add(direction.multiply(size));
+		const side1 = point.add(perpendicular.multiply(size/2));
+		const side2 = point.subtract(perpendicular.multiply(size/2));
+		
+		const arrowHead = new paper.Path({
+			segments: [tip, side1, side2],
+			closed: true
+		});
+		
+		return arrowHead;
 	}
 
 	// Function to add a shape to the undo history
@@ -909,9 +1142,8 @@
 		path.strokeColor = currentColor;
 		path.strokeWidth = 2;
 		
-		// Apply a semi-transparent fill
-		path.fillColor = new Color(currentColor);
-		path.fillColor.alpha = 0.3;
+		// Apply a light yellow semi-transparent fill regardless of stroke color
+		path.fillColor = globals.blueprintStyle.shapes.fillColor;
 		
 		// Add metadata to the path for category
 		path.data = {
@@ -2631,19 +2863,25 @@
 			heightText = `${Math.round(heightMm)}mm`;
 		}
 		
+		// Improved blueprint styling for dimensions
+		const blueprintFont = globals.blueprintStyle.measureText.fontFamily;
+		const blueprintColor = globals.blueprintStyle.dimension.lineColor;
+		const labelBgColor = globals.blueprintStyle.measureText.backgroundColor;
+		
 		// FIXED: Add detailed scale information at the top of canvas
 		const scaleInfoText = new paper.PointText({
 			point: new paper.Point(canvasWidth / 2, 15),
 			content: `Scale: 1 pixel = ${(1000/pixelsPerMeter).toFixed(2)}mm`,
-			fillColor: 'black',
+			fillColor: blueprintColor,
 			fontSize: 12,
+			fontFamily: blueprintFont,
 			justification: 'center'
 		});
 		
 		const scaleInfoBg = new paper.Path.Rectangle({
 			rectangle: scaleInfoText.bounds.expand(5),
-			fillColor: new paper.Color(1, 1, 1, 0.7),
-			strokeColor: 'black',
+			fillColor: labelBgColor,
+			strokeColor: blueprintColor,
 			strokeWidth: 1
 		});
 		
@@ -2655,16 +2893,17 @@
 		const widthLabel = new paper.PointText({
 			point: new paper.Point(canvasWidth / 2, 40),
 			content: `Width: ${widthText}`,
-			fillColor: 'black',
+			fillColor: blueprintColor,
 			fontSize: 16,
+			fontFamily: blueprintFont,
 			fontWeight: 'bold',
 			justification: 'center'
 		});
 		
 		const widthBg = new paper.Path.Rectangle({
 			rectangle: widthLabel.bounds.expand(5),
-			fillColor: new paper.Color(1, 1, 1, 0.7),
-			strokeColor: 'black',
+			fillColor: labelBgColor,
+			strokeColor: blueprintColor,
 			strokeWidth: 1
 		});
 		
@@ -2676,8 +2915,9 @@
 		const heightLabel = new paper.PointText({
 			point: new paper.Point(30, canvasHeight / 2),
 			content: `Height: ${heightText}`,
-			fillColor: 'black',
+			fillColor: blueprintColor,
 			fontSize: 16,
+			fontFamily: blueprintFont,
 			fontWeight: 'bold',
 			justification: 'center'
 		});
@@ -2687,8 +2927,8 @@
 		
 		const heightBg = new paper.Path.Rectangle({
 			rectangle: heightLabel.bounds.expand(5),
-			fillColor: new paper.Color(1, 1, 1, 0.7),
-			strokeColor: 'black',
+			fillColor: labelBgColor,
+			strokeColor: blueprintColor,
 			strokeWidth: 1
 		});
 		
@@ -2696,7 +2936,7 @@
 		const heightGroup = new paper.Group([heightBg, heightLabel]);
 		dimensionItems.push(heightGroup);
 		
-		// Add a scale bar at the bottom right
+		// Add a scale bar at the bottom right with improved styling
 		const scaleBarWidthMm = 100; // 10cm scale bar
 		const scaleBarWidthPixels = scaleBarWidthMm * pixelsPerMeter / 1000;
 		
@@ -2716,27 +2956,31 @@
 			const segment = new paper.Path.Rectangle({
 				point: [scaleBarX + i * segmentWidth, scaleBarY],
 				size: [segmentWidth, scaleBarHeight],
-				fillColor: i % 2 === 0 ? 'black' : 'white',
-				strokeColor: 'black',
+				fillColor: i % 2 === 0 ? blueprintColor : 'white',
+				strokeColor: blueprintColor,
 				strokeWidth: 1
 			});
 			
 			scaleBarGroup.addChild(segment);
 		}
 		
-		// Add scale bar label
+		// Add scale bar label with metric and imperial measurements
+		const metricText = `${scaleBarWidthMm}mm (${(scaleBarWidthMm/10).toFixed(1)}cm)`;
+		const imperialText = `${formatImperialText(scaleBarWidthMm/1000 * 3.28084)}`;
+		
 		const scaleBarLabel = new paper.PointText({
 			point: new paper.Point(scaleBarX + scaleBarWidthPixels / 2, scaleBarY + scaleBarHeight + 15),
-			content: `${scaleBarWidthMm}mm (${(scaleBarWidthMm/10).toFixed(1)}cm)`,
-			fillColor: 'black',
+			content: `${metricText} | ${imperialText}`,
+			fillColor: blueprintColor,
 			fontSize: 12,
+			fontFamily: blueprintFont,
 			justification: 'center'
 		});
 		
 		const scaleBarLabelBg = new paper.Path.Rectangle({
 			rectangle: scaleBarLabel.bounds.expand(5),
-			fillColor: new paper.Color(1, 1, 1, 0.8),
-			strokeColor: 'black',
+			fillColor: labelBgColor,
+			strokeColor: blueprintColor,
 			strokeWidth: 1
 		});
 		
@@ -2755,23 +2999,24 @@
 		const calibrationSquare = new paper.Path.Rectangle({
 			point: [scaleBarX - squareSizePixels - 20, scaleBarY],
 			size: [squareSizePixels, squareSizePixels],
-			fillColor: new paper.Color(1, 0, 0, 0.5), // Semi-transparent red
-			strokeColor: 'black',
+			fillColor: new paper.Color(0.12, 0.33, 0.65, 0.3), // Semi-transparent blueprint blue
+			strokeColor: blueprintColor,
 			strokeWidth: 1
 		});
 		
 		const squareLabel = new paper.PointText({
 			point: new paper.Point(calibrationSquare.bounds.center.x, calibrationSquare.bounds.bottom + 15),
 			content: `1cm × 1cm`,
-			fillColor: 'black',
+			fillColor: blueprintColor,
 			fontSize: 10,
+			fontFamily: blueprintFont,
 			justification: 'center'
 		});
 		
 		const squareLabelBg = new paper.Path.Rectangle({
 			rectangle: squareLabel.bounds.expand(3),
-			fillColor: new paper.Color(1, 1, 1, 0.8),
-			strokeColor: 'black',
+			fillColor: labelBgColor,
+			strokeColor: blueprintColor,
 			strokeWidth: 1
 		});
 		
@@ -2783,8 +3028,9 @@
 		const centerInfo = new paper.PointText({
 			point: paper.view.center,
 			content: `Canvas Size: ${widthText} × ${heightText}`,
-			fillColor: 'black',
+			fillColor: blueprintColor,
 			fontSize: 18,
+			fontFamily: blueprintFont,
 			fontWeight: 'bold',
 			justification: 'center'
 		});
@@ -2792,8 +3038,8 @@
 		// Create a white background with translucency
 		const centerInfoBg = new paper.Path.Rectangle({
 			rectangle: centerInfo.bounds.expand(10),
-			fillColor: new paper.Color(1, 1, 1, 0.7),
-			strokeColor: 'black',
+			fillColor: labelBgColor,
+			strokeColor: blueprintColor,
 			strokeWidth: 1
 		});
 		
