@@ -115,6 +115,16 @@
 		display: none;
 	}
 
+	.measurement-label {
+		background: rgba(255, 255, 255, 0.8);
+		border: 1px solid #ddd;
+		border-radius: 4px;
+		padding: 2px 6px;
+		font-family: monospace;
+		font-size: 11px;
+		pointer-events: none;
+	}
+
 	/* Add CSS for loading indicator */
 	.overlay {
 		position: absolute;
@@ -361,6 +371,7 @@
 			<div class="tool-buttons mb-3">
 				<button class="btn btn-sm btn-success" id="save_button">Save</button>
 				<button class="btn btn-sm btn-primary" id="screenshot_button">Screenshot</button>
+				<button class="btn btn-sm btn-info" id="pdf_button">Save as PDF</button>
 				<button class="btn btn-sm btn-danger" id="clear_button">Clear</button>
 			</div>
 
@@ -467,6 +478,39 @@
 <script src="https://code.jquery.com/jquery-3.6.0.min.js" integrity="sha256-/xUj+3OJU5yExlq6GSYGSHk7tPXikynS7ogEvDej/m4=" crossorigin="anonymous"></script>
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.0.2/dist/js/bootstrap.bundle.min.js" integrity="sha384-MrcW6ZMFYlzcLA8Nl+NtUVF0sA7MsXsP1UyJoMp4YLEuNSfAP+JcXn/tWtIaxVXM" crossorigin="anonymous"></script>
 <script src="https://deepgis.org/static/scripts/paperjs/dist/paper-full.min.js"></script>
+<!-- Use multiple CDN sources for redundancy -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://unpkg.com/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
+<script>
+    // Ensure jsPDF is properly set up as a global
+    window.addEventListener('load', function() {
+        if (typeof window.jspdf === 'undefined' || typeof window.jspdf !== 'object') {
+            console.warn('jsPDF not found in window.jspdf, checking alternative locations');
+            // Try to find jsPDF in other common locations
+            if (typeof jspdf !== 'undefined') {
+                window.jspdf = jspdf;
+                console.log('Found jsPDF in global scope, assigned to window.jspdf');
+            } else if (typeof window.jsPDF !== 'undefined') {
+                window.jspdf = { jsPDF: window.jsPDF };
+                console.log('Found jsPDF in window.jsPDF, assigned to window.jspdf.jsPDF');
+            } else {
+                // Last resort - dynamically load jsPDF
+                console.warn('jsPDF not found, attempting dynamic load');
+                var script = document.createElement('script');
+                script.src = 'https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js';
+                script.onload = function() {
+                    if (typeof jspdf !== 'undefined') {
+                        window.jspdf = jspdf;
+                    } else if (typeof window.jsPDF !== 'undefined') {
+                        window.jspdf = { jsPDF: window.jsPDF };
+                    }
+                    console.log('jsPDF dynamically loaded');
+                };
+                document.head.appendChild(script);
+            }
+        }
+    });
+</script>
 <script type="text/javascript">
 	// Setup PaperJS
 	paper.install(window);
@@ -493,7 +537,9 @@
 		startPoint: null, // Added for rectangle tool
 		centerPoint: null, // Added for circle tool
 		imageLoaded: false, // Track if image is fully loaded before enabling tools
-		isDrawing: false // Track active drawing state
+		isDrawing: false, // Track active drawing state
+		gridMetrics: null, // Store grid metrics for measurements
+		savedMeasurements: [] // Array to store saved measurements
 	};
 
 	// Variable declarations
@@ -506,11 +552,59 @@
 	let currentTool = null;
 	let imageCache = {};
 
+	// Move loading overlay functions to global scope
+	// Function to show loading overlay
+	function showLoadingOverlay(message = "Loading...") {
+		// Create loading overlay if it doesn't exist
+		if ($('#loading-overlay').length === 0) {
+			$('body').append(`
+				<div id="loading-overlay">
+					<div class="spinner-border" role="status">
+						<span class="sr-only">Loading...</span>
+					</div>
+					<div class="loading-text mt-2">${message}</div>
+				</div>
+			`);
+		} else {
+			// Update message and show existing overlay
+			$('#loading-overlay .loading-text').text(message);
+			$('#loading-overlay').show();
+		}
+	}
+	
+	// Function to hide loading overlay
+	function hideLoadingOverlay() {
+		$('#loading-overlay').hide();
+	}
+
+	// Function to clear the canvas
+	function clearCanvas() {
+		// Clear the PaperJS project
+		paper.project.activeLayer.removeChildren();
+		
+		// Clear any active drawing states
+		isDrawing = false;
+		currentPath = [];
+		allPaths = [];
+		globals.path = null;
+		globals.undos = [];
+		globals.redos = [];
+		
+		// Reset any active tools
+		currentTool = null;
+		$(".tool-buttons button").removeClass("active");
+	}
+
 	// Add measurement tool functionality
 	function initializeMeasurementTool() {
 		const measureTool = new paper.Tool();
 		
 		measureTool.onMouseDown = function(event) {
+			if (!globals.imageLoaded) {
+				showWarningMessage("Please wait for image to fully load before using tools");
+				return;
+			}
+			
 			if (!globals.isMeasuring) {
 				// Start measuring
 				globals.isMeasuring = true;
@@ -522,19 +616,135 @@
 				globals.measurementPath.strokeWidth = 2;
 				globals.measurementPath.dashArray = [5, 5];
 				
+				// Create measurement text
+				globals.measurementText = new paper.PointText({
+					point: event.point.add(new paper.Point(10, 10)),
+					content: "0px",
+					fillColor: 'black',
+					fontSize: 12,
+					fontFamily: 'monospace'
+				});
+				
+				// Create background rectangle for the text
+				const textBackground = new paper.Path.Rectangle({
+					rectangle: globals.measurementText.bounds.expand(5),
+					fillColor: new paper.Color(1, 1, 1, 0.8),
+					strokeColor: 'red',
+					strokeWidth: 1
+				});
+				
+				// Ensure background is behind text
+				textBackground.sendToBack();
+				
+				// Group the text and background for easier manipulation
+				globals.tempGroup = new paper.Group([textBackground, globals.measurementText]);
+				
 				// Show measurement info
 				$('#measurementInfo').show().css({
 					left: event.point.x + 10,
 					top: event.point.y + 10
 				});
 			} else {
-				// Finish measuring
+				// Finish measuring and save the measurement
 				globals.isMeasuring = false;
 				
-				// Clean up
+				// Convert final measurement to a permanent object
+				if (globals.measurementPath && globals.tempGroup) {
+					// Get the measurement path data for storage
+					const startPoint = globals.measurementPath.segments[0].point;
+					const endPoint = globals.measurementPath.segments[1].point;
+					
+					// Calculate distance
+					const dx = endPoint.x - startPoint.x;
+					const dy = endPoint.y - startPoint.y;
+					const pixelDistance = Math.sqrt(dx * dx + dy * dy);
+					
+					// Get the real-world distances if grid metrics exist
+					let metricDistance = null;
+					let imperialDistance = null;
+					
+					if (globals.gridMetrics && globals.gridMetrics.realWorldScale) {
+						// Get pixels per meter from grid metrics
+						const pixelsPerMeter = globals.gridMetrics.cellWidth / globals.gridMetrics.realWorldScale.width;
+						
+						// Convert pixel distance to meters
+						metricDistance = pixelDistance / pixelsPerMeter;
+						
+						// Convert meters to inches (1 meter = 39.3701 inches)
+						imperialDistance = metricDistance * 39.3701;
+					}
+					
+					// Create a formatted permanent label
+					let labelText = `${Math.round(pixelDistance)}px`;
+					if (metricDistance !== null) {
+						if (metricDistance < 1) {
+							// Show in cm if less than 1 meter
+							labelText += ` / ${Math.round(metricDistance * 100)}cm`;
+						} else {
+							labelText += ` / ${metricDistance.toFixed(2)}m`;
+						}
+						labelText += ` / ${imperialDistance.toFixed(2)}in`;
+					}
+					
+					// Create a permanent line
+					const finalPath = new paper.Path.Line(startPoint, endPoint);
+					finalPath.strokeColor = 'red';
+					finalPath.strokeWidth = 2;
+					finalPath.dashArray = [5, 5];
+					
+					// Create permanent text
+					const finalText = new paper.PointText({
+						point: endPoint.add(new paper.Point(10, -10)),
+						content: labelText,
+						fillColor: 'black',
+						fontSize: 12,
+						fontFamily: 'monospace'
+					});
+					
+					// Create background rectangle for text
+					const finalBackground = new paper.Path.Rectangle({
+						rectangle: finalText.bounds.expand(5),
+						fillColor: new paper.Color(1, 1, 1, 0.8),
+						strokeColor: 'red',
+						strokeWidth: 1
+					});
+					
+					// Ensure background is behind text
+					finalBackground.sendToBack();
+					
+					// Group the measurement elements
+					const measurementGroup = new paper.Group([finalPath, finalBackground, finalText]);
+					
+					// Add metadata for undo functionality
+					measurementGroup.data = {
+						type: 'measurement',
+						pixelDistance: pixelDistance,
+						metricDistance: metricDistance,
+						imperialDistance: imperialDistance,
+						startPoint: startPoint,
+						endPoint: endPoint,
+						createdAt: new Date().getTime()
+					};
+					
+					// Add to undo stack
+					addToUndoStack(measurementGroup);
+					
+					// Add to saved measurements array
+					globals.savedMeasurements.push(measurementGroup);
+					
+					// Show success message
+					showSuccessMessage("Measurement saved");
+				}
+				
+				// Clean up temporary elements
 				if (globals.measurementPath) {
 					globals.measurementPath.remove();
 					globals.measurementPath = null;
+				}
+				
+				if (globals.tempGroup) {
+					globals.tempGroup.remove();
+					globals.tempGroup = null;
 				}
 				
 				$('#measurementInfo').hide();
@@ -556,18 +766,104 @@
 				// Calculate distance
 				const dx = event.point.x - globals.measureStartPoint.x;
 				const dy = event.point.y - globals.measureStartPoint.y;
-				const distance = Math.sqrt(dx * dx + dy * dy);
-				const rounded = Math.round(distance * 100) / 100;
+				const pixelDistance = Math.sqrt(dx * dx + dy * dy);
+				const rounded = Math.round(pixelDistance * 100) / 100;
 				
-				// Update displays
-				$('#measure-distance').text(`Distance: ${rounded}px`);
-				$('#measurementInfo').text(`Start: ${Math.round(globals.measureStartPoint.x)},${Math.round(globals.measureStartPoint.y)} | End: ${x},${y} | Distance: ${rounded}px`);
+				// Get the real-world distances if grid metrics exist
+				let metricText = "";
+				let imperialText = "";
+				
+				if (globals.gridMetrics && globals.gridMetrics.realWorldScale) {
+					// Get pixels per meter from grid metrics
+					const pixelsPerMeter = globals.gridMetrics.cellWidth / globals.gridMetrics.realWorldScale.width;
+					
+					// Convert pixel distance to meters
+					const metricDistance = pixelDistance / pixelsPerMeter;
+					
+					// Convert meters to inches (1 meter = 39.3701 inches)
+					const imperialDistance = metricDistance * 39.3701;
+					
+					// Format metric distance
+					if (metricDistance < 1) {
+						// Show in cm if less than 1 meter
+						metricText = ` / ${Math.round(metricDistance * 100)}cm`;
+					} else {
+						metricText = ` / ${metricDistance.toFixed(2)}m`;
+					}
+					
+					// Format imperial distance
+					imperialText = ` / ${imperialDistance.toFixed(2)}in`;
+					
+					// Update footer display
+					$('#measure-distance').text(`Distance: ${rounded}px${metricText}${imperialText}`);
+				} else {
+					// Just show pixels if no grid metrics
+					$('#measure-distance').text(`Distance: ${rounded}px`);
+				}
+				
+				// Update the display text
+				if (globals.measurementText) {
+					let displayText = `${rounded}px`;
+					if (metricText) displayText += metricText;
+					if (imperialText) displayText += imperialText;
+					
+					globals.measurementText.content = displayText;
+					
+					// Update the background rectangle
+					if (globals.tempGroup && globals.tempGroup.children.length > 1) {
+						const background = globals.tempGroup.children[0];
+						background.remove();
+						
+						// Create new background
+						const newBackground = new paper.Path.Rectangle({
+							rectangle: globals.measurementText.bounds.expand(5),
+							fillColor: new paper.Color(1, 1, 1, 0.8),
+							strokeColor: 'red',
+							strokeWidth: 1
+						});
+						
+						// Add back to group and send to back
+						globals.tempGroup.insertChild(0, newBackground);
+					}
+					
+					// Position the text at the midpoint of the line
+					const midpoint = globals.measureStartPoint.add(event.point).divide(2);
+					globals.tempGroup.position = midpoint.add(new paper.Point(0, -15));
+				}
+				
+				// Update measurement info tooltip
+				let infoText = `Start: ${Math.round(globals.measureStartPoint.x)},${Math.round(globals.measureStartPoint.y)} | End: ${x},${y} | Distance: ${rounded}px`;
+				if (metricText) infoText += metricText;
+				if (imperialText) infoText += imperialText;
+				
+				$('#measurementInfo').text(infoText);
 				
 				// Position the info box
 				$('#measurementInfo').css({
 					left: event.point.x + 10,
 					top: event.point.y + 10
 				});
+			}
+		};
+		
+		measureTool.onKeyDown = function(event) {
+			// Cancel measurement on Escape key
+			if (event.key === 'escape' && globals.isMeasuring) {
+				globals.isMeasuring = false;
+				
+				// Clean up temporary elements
+				if (globals.measurementPath) {
+					globals.measurementPath.remove();
+					globals.measurementPath = null;
+				}
+				
+				if (globals.tempGroup) {
+					globals.tempGroup.remove();
+					globals.tempGroup = null;
+				}
+				
+				$('#measurementInfo').hide();
+				$('#measure-distance').text('Distance: 0px');
 			}
 		};
 		
@@ -1260,46 +1556,6 @@
 			}
 		}
 		
-		// Function to show loading overlay
-		function showLoadingOverlay() {
-			// Create loading overlay if it doesn't exist
-			if ($('#loading-overlay').length === 0) {
-				$('body').append(`
-					<div id="loading-overlay">
-						<div class="spinner-border" role="status">
-							<span class="sr-only">Loading...</span>
-						</div>
-						<div class="loading-text mt-2">Loading image...</div>
-					</div>
-				`);
-			} else {
-				$('#loading-overlay').show();
-			}
-		}
-		
-		// Function to hide loading overlay
-		function hideLoadingOverlay() {
-			$('#loading-overlay').hide();
-		}
-		
-		// Function to clear the canvas
-		function clearCanvas() {
-			// Clear the PaperJS project
-			paper.project.activeLayer.removeChildren();
-			
-			// Clear any active drawing states
-			isDrawing = false;
-			currentPath = [];
-			allPaths = [];
-			globals.path = null;
-			globals.undos = [];
-			globals.redos = [];
-			
-			// Reset any active tools
-			currentTool = null;
-			$(".tool-buttons button").removeClass("active");
-		}
-		
 		// Function to load image from server
 		function loadImage(direction) {
 			showLoadingOverlay("Loading image...");
@@ -1694,6 +1950,9 @@
 			globals.undos = [];
 			globals.redos = [];
 			
+			// Clear saved measurements
+			globals.savedMeasurements = [];
+			
 			// Update view
 			paper.view.update();
 			
@@ -2054,6 +2313,12 @@
 				gridGroup.addChild(intersectionsGroup);
 			}
 			
+			// Store grid metrics in globals for measurement calculations
+			if (gridData.metrics && gridData.metrics.realWorldScale) {
+				globals.gridMetrics = gridData.metrics;
+				console.log('Grid metrics stored for measurements:', globals.gridMetrics);
+			}
+			
 			// Add the entire grid group to undo stack
 			addToUndoStack(gridGroup);
 			
@@ -2068,6 +2333,10 @@
 				metricsText += `Cell Height: ${Math.round(gridData.metrics.cellHeight)}px\n`;
 				metricsText += `Rotation: ${gridData.metrics.rotation.toFixed(1)}°\n`;
 				metricsText += `Confidence: ${(gridData.metrics.confidence * 100).toFixed(0)}%`;
+				
+				if (gridData.metrics.realWorldScale) {
+					metricsText += `\nScale: 1px = ${(gridData.metrics.realWorldScale.width / gridData.metrics.cellWidth).toFixed(5)}m`;
+				}
 				
 				if (gridData.metrics.algorithm) {
 					metricsText += `\nMethod: ${gridData.metrics.algorithm}`;
@@ -2121,6 +2390,11 @@
 				showSuccessMessage(metricsText, 10000);
 			}
 		}
+
+		// Add PDF button click handler
+		$('#pdf_button').click(function() {
+			saveToPDF();
+		});
 	});
 
 	// Function to show error, success, or warning messages to user
@@ -2172,6 +2446,408 @@
 
 	function showWarningMessage(message, duration = 5000) {
 		showNotification(message, 'warning', duration);
+	}
+
+	// Function to save the canvas as a PDF for printing on 44" wide paper
+	function saveToPDF() {
+		try {
+			showLoadingOverlay("Generating PDF...");
+			
+			// Check if jsPDF is available
+			if (typeof window.jspdf === 'undefined' || !window.jspdf.jsPDF) {
+				// Try to find jsPDF in other common locations before failing
+				if (typeof jspdf !== 'undefined' && jspdf.jsPDF) {
+					window.jspdf = jspdf;
+					console.log('Found jsPDF in global scope, using it');
+				} else if (typeof window.jsPDF !== 'undefined') {
+					window.jspdf = { jsPDF: window.jsPDF };
+					console.log('Found jsPDF in window.jsPDF, using it');
+				} else {
+					console.error('jsPDF library not loaded properly');
+					showErrorMessage('PDF generation library not loaded properly. Please check your internet connection and try again.');
+					hideLoadingOverlay();
+					return;
+				}
+			}
+			
+			// Check if we have grid metrics for accurate scaling
+			if (!globals.gridMetrics || !globals.gridMetrics.realWorldScale) {
+				showWarningMessage("No grid metrics available. Scale may not be accurate in the PDF.");
+			}
+			
+			// Get the canvas dimensions
+			const canvas = document.getElementById('canvas');
+			const width = canvas.width;
+			const height = canvas.height;
+			
+			// Calculate the target paper width (44 inches in mm)
+			const paperWidthInches = 44;
+			const paperWidthMm = paperWidthInches * 25.4; // 44 inches in mm
+			
+			// Determine the real-world dimensions of the image at 100% scale
+			let realWorldWidthMm = width;
+			let realWorldHeightMm = height;
+			let pixelsPerMeter = 1000; // Default fallback value (1 pixel = 1 mm)
+			
+			if (globals.gridMetrics && globals.gridMetrics.realWorldScale) {
+				// Get the correct pixel-to-meter conversion from grid metrics
+				const cellWidthPixels = globals.gridMetrics.cellWidth;
+				const cellWidthMeters = globals.gridMetrics.realWorldScale.width;
+				
+				// Calculate pixels per meter correctly
+				pixelsPerMeter = cellWidthPixels / cellWidthMeters;
+				console.log(`Grid cell: ${cellWidthPixels}px = ${cellWidthMeters}m, Pixels per meter: ${pixelsPerMeter}`);
+				
+				// Calculate real-world dimensions in mm at 100% scale
+				realWorldWidthMm = (width / pixelsPerMeter) * 1000; // Convert meters to mm
+				realWorldHeightMm = (height / pixelsPerMeter) * 1000; // Convert meters to mm
+				
+				console.log(`Canvas dimensions: ${width}px × ${height}px`);
+				console.log(`Real world dimensions at 100% scale: ${realWorldWidthMm.toFixed(1)}mm × ${realWorldHeightMm.toFixed(1)}mm`);
+			} else {
+				// Without grid metrics, make a best guess (1px = 1mm)
+				pixelsPerMeter = 1000;
+				realWorldWidthMm = width;
+				realWorldHeightMm = height;
+				showWarningMessage("Using estimated scale without grid metrics. The output may not be exactly 1:1.");
+			}
+			
+			// Store original canvas items to restore later
+			const originalItems = [];
+			paper.project.activeLayer.children.forEach((item) => {
+				originalItems.push({
+					item: item,
+					visible: item.visible
+				});
+			});
+			
+			// Add metric dimensions and scale bar to the canvas before saving
+			const dimensionItems = addMetricDimensionsToCanvas(pixelsPerMeter, width, height, realWorldWidthMm, realWorldHeightMm);
+			
+			// Calculate padding needed to reach 44" width
+			// This is the key change for the new feature - always use 100% scale
+			let pdfWidthMm = realWorldWidthMm;
+			let pdfHeightMm = realWorldHeightMm;
+			
+			// Calculate padding needed on each side to reach 44" width
+			let paddingNeeded = 0;
+			if (pdfWidthMm < paperWidthMm) {
+				paddingNeeded = paperWidthMm - pdfWidthMm;
+				console.log(`Adding padding of ${paddingNeeded.toFixed(1)}mm to reach 44" width`);
+			}
+			
+			// Initialize jsPDF with orientation based on dimensions
+			const orientation = pdfWidthMm > pdfHeightMm ? 'landscape' : 'portrait';
+			
+			// Create PDF using the global jsPDF variable
+			const { jsPDF } = window.jspdf;
+			
+			// Create PDF with the full 44" width
+			const pdf = new jsPDF({
+				orientation: orientation,
+				unit: 'mm',
+				format: [Math.max(pdfWidthMm, paperWidthMm), pdfHeightMm],
+				compress: true
+			});
+			
+			// Get the canvas data as an image
+			const imgData = canvas.toDataURL('image/png', 1.0);
+			
+			// Calculate left padding to center the image in the 44" width
+			const leftPadding = paddingNeeded > 0 ? (paddingNeeded / 2) : 0;
+			
+			// Add image to PDF at 100% scale with padding to center it
+			pdf.addImage(imgData, 'PNG', leftPadding, 0, pdfWidthMm, pdfHeightMm);
+			
+			// Add metadata about scaling
+			let scaleInfo = "1:1 scale (100%)";
+			if (globals.gridMetrics && globals.gridMetrics.realWorldScale) {
+				scaleInfo = `1:1 scale (${realWorldWidthMm.toFixed(0)}mm × ${realWorldHeightMm.toFixed(0)}mm)`;
+				if (paddingNeeded > 0) {
+					scaleInfo += ` with ${paddingNeeded.toFixed(0)}mm padding to reach 44" width`;
+				}
+			} else {
+				scaleInfo = "Best estimated 1:1 scale (may not be exactly accurate)";
+			}
+			
+			// Add printing instructions
+			pdf.setFontSize(10);
+			
+			pdf.setTextColor(0, 0, 0);
+			pdf.text(`PRINTING INSTRUCTIONS: For accurate scale, print at 100% size (no scaling).`, 5, pdfHeightMm - 15);
+			
+			// Add a small footer with scale information
+			pdf.setFontSize(8);
+			pdf.setTextColor(100, 100, 100);
+			pdf.text(`Scale: ${scaleInfo} | Generated: ${new Date().toLocaleString()}`, 5, pdfHeightMm - 5);
+			
+			// Generate PDF filename from image name or date
+			const filename = currentImage && currentImage.name 
+				? `${currentImage.name}_100pct_44in.pdf` 
+				: `map_100pct_44in_${new Date().toISOString().replace(/[:.]/g, '-')}.pdf`;
+			
+			// Save PDF
+			pdf.save(filename);
+			
+			// Remove the dimension items from the canvas
+			dimensionItems.forEach(item => item.remove());
+			
+			// Restore original visibility
+			originalItems.forEach(({item, visible}) => {
+				if (item && !item.removed) {
+					item.visible = visible;
+				}
+			});
+			
+			// Update the view
+			paper.view.update();
+			
+			hideLoadingOverlay();
+			showSuccessMessage("PDF generated successfully at 100% scale with 44-inch width and metric dimensions");
+		} catch (e) {
+			hideLoadingOverlay();
+			console.error("Error generating PDF:", e);
+			showErrorMessage("Error generating PDF: " + e.message);
+		}
+	}
+
+	// Function to add metric dimensions and scale bar to the canvas
+	function addMetricDimensionsToCanvas(pixelsPerMeter, canvasWidth, canvasHeight, widthMm, heightMm) {
+		const dimensionItems = [];
+		
+		// Format metric dimensions
+		let widthText = "";
+		let heightText = "";
+		
+		if (widthMm > 1000) {
+			widthText = `${(widthMm / 1000).toFixed(2)}m`;
+		} else {
+			widthText = `${Math.round(widthMm)}mm`;
+		}
+		
+		if (heightMm > 1000) {
+			heightText = `${(heightMm / 1000).toFixed(2)}m`;
+		} else {
+			heightText = `${Math.round(heightMm)}mm`;
+		}
+		
+		// FIXED: Add detailed scale information at the top of canvas
+		const scaleInfoText = new paper.PointText({
+			point: new paper.Point(canvasWidth / 2, 15),
+			content: `Scale: 1 pixel = ${(1000/pixelsPerMeter).toFixed(2)}mm`,
+			fillColor: 'black',
+			fontSize: 12,
+			justification: 'center'
+		});
+		
+		const scaleInfoBg = new paper.Path.Rectangle({
+			rectangle: scaleInfoText.bounds.expand(5),
+			fillColor: new paper.Color(1, 1, 1, 0.7),
+			strokeColor: 'black',
+			strokeWidth: 1
+		});
+		
+		scaleInfoBg.sendToBack();
+		const scaleInfoGroup = new paper.Group([scaleInfoBg, scaleInfoText]);
+		dimensionItems.push(scaleInfoGroup);
+		
+		// Add the width dimension at the top
+		const widthLabel = new paper.PointText({
+			point: new paper.Point(canvasWidth / 2, 40),
+			content: `Width: ${widthText}`,
+			fillColor: 'black',
+			fontSize: 16,
+			fontWeight: 'bold',
+			justification: 'center'
+		});
+		
+		const widthBg = new paper.Path.Rectangle({
+			rectangle: widthLabel.bounds.expand(5),
+			fillColor: new paper.Color(1, 1, 1, 0.7),
+			strokeColor: 'black',
+			strokeWidth: 1
+		});
+		
+		widthBg.sendToBack();
+		const widthGroup = new paper.Group([widthBg, widthLabel]);
+		dimensionItems.push(widthGroup);
+		
+		// Add the height dimension on the left
+		const heightLabel = new paper.PointText({
+			point: new paper.Point(30, canvasHeight / 2),
+			content: `Height: ${heightText}`,
+			fillColor: 'black',
+			fontSize: 16,
+			fontWeight: 'bold',
+			justification: 'center'
+		});
+		
+		// Rotate the height label
+		heightLabel.rotate(-90);
+		
+		const heightBg = new paper.Path.Rectangle({
+			rectangle: heightLabel.bounds.expand(5),
+			fillColor: new paper.Color(1, 1, 1, 0.7),
+			strokeColor: 'black',
+			strokeWidth: 1
+		});
+		
+		heightBg.sendToBack();
+		const heightGroup = new paper.Group([heightBg, heightLabel]);
+		dimensionItems.push(heightGroup);
+		
+		// Add a scale bar at the bottom right
+		const scaleBarWidthMm = 100; // 10cm scale bar
+		const scaleBarWidthPixels = scaleBarWidthMm * pixelsPerMeter / 1000;
+		
+		// FIXED: Log scale bar size for debugging
+		console.log(`Scale bar: ${scaleBarWidthMm}mm = ${scaleBarWidthPixels}px`);
+		
+		// Create a scale bar with alternating black and white segments
+		const segments = 5; // 5 segments alternating black/white
+		const segmentWidth = scaleBarWidthPixels / segments;
+		const scaleBarHeight = 20;
+		const scaleBarY = canvasHeight - 50;
+		const scaleBarX = canvasWidth - scaleBarWidthPixels - 50;
+		
+		const scaleBarGroup = new paper.Group();
+		
+		for (let i = 0; i < segments; i++) {
+			const segment = new paper.Path.Rectangle({
+				point: [scaleBarX + i * segmentWidth, scaleBarY],
+				size: [segmentWidth, scaleBarHeight],
+				fillColor: i % 2 === 0 ? 'black' : 'white',
+				strokeColor: 'black',
+				strokeWidth: 1
+			});
+			
+			scaleBarGroup.addChild(segment);
+		}
+		
+		// Add scale bar label
+		const scaleBarLabel = new paper.PointText({
+			point: new paper.Point(scaleBarX + scaleBarWidthPixels / 2, scaleBarY + scaleBarHeight + 15),
+			content: `${scaleBarWidthMm}mm (${(scaleBarWidthMm/10).toFixed(1)}cm)`,
+			fillColor: 'black',
+			fontSize: 12,
+			justification: 'center'
+		});
+		
+		const scaleBarLabelBg = new paper.Path.Rectangle({
+			rectangle: scaleBarLabel.bounds.expand(5),
+			fillColor: new paper.Color(1, 1, 1, 0.8),
+			strokeColor: 'black',
+			strokeWidth: 1
+		});
+		
+		scaleBarLabelBg.sendToBack();
+		scaleBarGroup.addChild(scaleBarLabelBg);
+		scaleBarGroup.addChild(scaleBarLabel);
+		dimensionItems.push(scaleBarGroup);
+		
+		// Add a calibration square of known dimensions (1cm x 1cm)
+		const squareSizeMm = 10; // 1cm calibration square
+		const squareSizePixels = squareSizeMm * pixelsPerMeter / 1000;
+		
+		// FIXED: Log calibration square size for debugging
+		console.log(`Calibration square: ${squareSizeMm}mm = ${squareSizePixels}px`);
+		
+		const calibrationSquare = new paper.Path.Rectangle({
+			point: [scaleBarX - squareSizePixels - 20, scaleBarY],
+			size: [squareSizePixels, squareSizePixels],
+			fillColor: new paper.Color(1, 0, 0, 0.5), // Semi-transparent red
+			strokeColor: 'black',
+			strokeWidth: 1
+		});
+		
+		const squareLabel = new paper.PointText({
+			point: new paper.Point(calibrationSquare.bounds.center.x, calibrationSquare.bounds.bottom + 15),
+			content: `1cm × 1cm`,
+			fillColor: 'black',
+			fontSize: 10,
+			justification: 'center'
+		});
+		
+		const squareLabelBg = new paper.Path.Rectangle({
+			rectangle: squareLabel.bounds.expand(3),
+			fillColor: new paper.Color(1, 1, 1, 0.8),
+			strokeColor: 'black',
+			strokeWidth: 1
+		});
+		
+		squareLabelBg.sendToBack();
+		const calibrationGroup = new paper.Group([calibrationSquare, squareLabelBg, squareLabel]);
+		dimensionItems.push(calibrationGroup);
+		
+		// Add dimensions in the center of the canvas
+		const centerInfo = new paper.PointText({
+			point: paper.view.center,
+			content: `Canvas Size: ${widthText} × ${heightText}`,
+			fillColor: 'black',
+			fontSize: 18,
+			fontWeight: 'bold',
+			justification: 'center'
+		});
+		
+		// Create a white background with translucency
+		const centerInfoBg = new paper.Path.Rectangle({
+			rectangle: centerInfo.bounds.expand(10),
+			fillColor: new paper.Color(1, 1, 1, 0.7),
+			strokeColor: 'black',
+			strokeWidth: 1
+		});
+		
+		centerInfoBg.sendToBack();
+		const centerInfoGroup = new paper.Group([centerInfoBg, centerInfo]);
+		dimensionItems.push(centerInfoGroup);
+		
+		// Update the view to render the new items
+		paper.view.update();
+		
+		return dimensionItems;
+	}
+
+	// Add helper function to determine if PDF will fit on standard paper
+	function getClosestStandardPaperSize(widthMm, heightMm) {
+		// Common paper sizes in mm (width, height) - with portrait orientation
+		const standardSizes = {
+			'A0': [841, 1189],
+			'A1': [594, 841],
+			'A2': [420, 594],
+			'A3': [297, 420],
+			'A4': [210, 297],
+			'Letter': [215.9, 279.4],
+			'Legal': [215.9, 355.6],
+			'ARCH_E': [914.4, 1219.2] // 36 x 48 inches
+		};
+		
+		// Normalize orientation for comparison (make width ≤ height)
+		let w = widthMm;
+		let h = heightMm;
+		let landscape = false;
+		
+		if (w > h) {
+			landscape = true;
+			[w, h] = [h, w]; // Swap for comparison with standard sizes
+		}
+		
+		// Find closest standard size
+		let closestSize = 'Custom';
+		let minDiff = Infinity;
+		
+		for (const [name, dims] of Object.entries(standardSizes)) {
+			const [stdW, stdH] = dims;
+			// Check if our size fits within this standard size
+			if (w <= stdW && h <= stdH) {
+				const diff = (stdW - w) + (stdH - h); // Total difference in dimensions
+				if (diff < minDiff) {
+					minDiff = diff;
+					closestSize = name;
+				}
+			}
+		}
+		
+		return { size: closestSize, landscape };
 	}
 </script>
 {% endblock %}

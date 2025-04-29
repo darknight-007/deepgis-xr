@@ -1,7 +1,147 @@
-window.globals = {};
-window.globals.rasters = [];
-window.globals.layers = {};
-window.globals.active_layer = "";
+// Global state management
+window.globals = {
+    rasters: [],
+    layers: {},
+    active_layer: "",
+    drawnItems: new L.FeatureGroup(),
+    categoryColor: {},
+    histogram_chart: null,
+    chart: null,
+    lastLayer: null
+};
+
+// Helper function to parse hash URL
+function parseHashUrl() {
+    const hash = window.location.hash;
+    if (!hash) return null;
+    
+    const [zoom, lat, lng] = hash.substring(1).split('/').map(Number);
+    return { zoom, lat, lng };
+}
+
+// Helper function to generate hash URL
+function generateHashUrl(layer, zoom, lat, lng) {
+    return `https://mbtiles.deepgis.org/data/${layer}/#${zoom}/${lat}/${lng}`;
+}
+
+// Initialize map
+var map = L.map('map', {
+    minZoom: 12,
+    maxZoom: 24,
+    updateWhenZooming: false,
+    updateWhenIdle: true,
+    preferCanvas: true
+});
+
+// Set initial view based on URL hash or default coordinates
+const hashCoords = parseHashUrl();
+if (hashCoords) {
+    map.setView([hashCoords.lat, hashCoords.lng], hashCoords.zoom);
+} else {
+    map.setView([33.78210534131368, -111.26527270115186], 23);
+}
+
+// Update URL hash when map moves
+map.on('moveend', function() {
+    const center = map.getCenter();
+    const zoom = map.getZoom();
+    const hash = `#${zoom}/${center.lat.toFixed(5)}/${center.lng.toFixed(5)}`;
+    
+    // Only update hash if we're viewing an MBTiles layer
+    if (window.globals.active_layer && window.globals.active_layer.startsWith('bf_')) {
+        window.history.replaceState(null, null, hash);
+    }
+});
+
+// Add feature group to map first
+map.addLayer(window.globals.drawnItems);
+
+// Initialize draw control with the properly initialized feature group
+var drawControl = new L.Control.Draw({
+    edit: {
+        featureGroup: window.globals.drawnItems
+    },
+    draw: {
+        polyline: false,
+        circle: false,
+        circlemarker: false,
+        marker: false,
+        polygon: {
+            allowIntersection: false,
+            showArea: true
+        },
+        rectangle: true
+    }
+});
+
+// Initialize raster layers with the feature group
+const { baseLayers: rasterBaseLayers, overlayLayers, layerControl: rasterLayerControl } = window.initRasterLayers(map, window.globals.drawnItems);
+
+// Handle base layer changes
+map.on('baselayerchange', function(e) {
+    window.globals.active_layer = e.name;
+    
+    // If switching to an MBTiles layer, update URL hash
+    if (e.name && e.name.startsWith('bf_')) {
+        const center = map.getCenter();
+        const zoom = map.getZoom();
+        const hash = `#${zoom}/${center.lat.toFixed(5)}/${center.lng.toFixed(5)}`;
+        window.history.replaceState(null, null, hash);
+    }
+});
+
+// Add the draw control after organizing other controls
+map.addControl(drawControl);
+
+// Add our additional layers to the globals without redeclaring baseLayers
+window.globals.layers["OpenStreetMap"] = L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    maxZoom: 19,
+    attribution: '© OpenStreetMap contributors'
+});
+
+window.globals.layers["Google Satellite"] = L.tileLayer('http://{s}.google.com/vt/lyrs=s&x={x}&y={y}&z={z}', {
+    maxZoom: 19,
+    subdomains: ['mt0', 'mt1', 'mt2', 'mt3'],
+    attribution: '© Google'
+});
+
+// Add default layer
+window.globals.layers["OpenStreetMap"].addTo(map);
+
+// Create additional layers object without conflicting with rasterBaseLayers
+var additionalLayers = {
+    "OpenStreetMap": window.globals.layers["OpenStreetMap"],
+    "Google Satellite": window.globals.layers["Google Satellite"]
+};
+
+// Create empty overlays object for additional layers
+var overlays = {};
+
+// Add layer control for additional layers
+var additionalLayerControl = L.control.layers(additionalLayers, overlays, {
+    position: 'topleft',
+    collapsed: true
+}).addTo(map);
+
+// Draw event handlers
+map.on(L.Draw.Event.CREATED, function(e) {
+    var layer = e.layer;
+    window.globals.drawnItems.addLayer(layer);
+});
+
+map.on(L.Draw.Event.EDITED, function(e) {
+    var layers = e.layers;
+    layers.eachLayer(function(layer) {
+        // Handle edited layers
+    });
+});
+
+map.on(L.Draw.Event.DELETED, function(e) {
+    var layers = e.layers;
+    layers.eachLayer(function(layer) {
+        // Handle deleted layers
+    });
+});
 
 function updateCategoryProperties() {
     $.ajax({
@@ -26,17 +166,14 @@ function updateCategoryProperties() {
             set_label_draw_color = function() {
                 if ($('#freeHandButton').hasClass('btn-warning')) {
                     freeHand();
-                    drawer = drawnItems.getLayer(window.globals.lastLayer);
-                    drawer.setMode('view');
+                    var drawer = window.globals.drawnItems.getLayer(window.globals.lastLayer);
+                    if (drawer) {
+                        drawer.setMode('view');
+                    }
                 } else {
                     var color = rgbToHex($(this).attr('data-color'));
                     drawControl.setDrawingOptions({
                         rectangle: {
-                            shapeOptions: {
-                                color: color
-                            }
-                        },
-                        circle: {
                             shapeOptions: {
                                 color: color
                             }
@@ -171,57 +308,6 @@ function showSnackBar(text) {
 
 updateCategoryProperties();
 
-
-var map = L.map('map', {
-    minZoom: 1,
-    maxZoom: 19,
-    updateWhenZooming: false,
-    updateWhenIdle: true,
-    preferCanvas: true
-});
-
-// OpenStreetMap layer
-var osm = L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
-    maxZoom: 19,
-    attribution: '© OpenStreetMap contributors'
-});
-
-// Google Maps layer
-var googleSat = L.tileLayer('http://{s}.google.com/vt/lyrs=s&x={x}&y={y}&z={z}', {
-    maxZoom: 19,
-    subdomains: ['mt0', 'mt1', 'mt2', 'mt3'],
-    attribution: '© Google'
-});
-
-// MBTiles layer
-var mbTiles = L.tileLayer('/tiles/{z}/{x}/{y}.png', {
-    minZoom: 0,
-    maxZoom: 19,
-    tms: true,
-    attribution: '© DeepGIS MBTiles'
-});
-
-// Add layers to the globals
-window.globals.layers["OpenStreetMap"] = osm;
-window.globals.layers["Google Satellite"] = googleSat;
-window.globals.layers["MBTiles"] = mbTiles;
-
-// Add default layer and set initial view
-osm.addTo(map);
-
-// Set view to Hayden Butte (A Mountain) at ASU Tempe
-map.setView([33.4294, -111.9349], 16);
-
-// Create base layers object
-var baseLayers = {
-    "OpenStreetMap": osm,
-    "Google Satellite": googleSat,
-    "MBTiles": mbTiles
-};
-
-// Create empty overlays object for additional layers
-var overlays = {};
-
 // Create a custom control for the DeepGIS home link
 var HomeControl = L.Control.extend({
     options: {
@@ -246,39 +332,85 @@ var HomeControl = L.Control.extend({
     }
 });
 
-// Add the home control before other controls
+// Add controls to map
 new HomeControl().addTo(map);
 
-// Position the layer control in the topleft, after the home link
-var layerControl = L.control.layers(baseLayers, overlays, {
-    position: 'topleft',
-    collapsed: true
-}).addTo(map);
-
-// Position the draw control in the topleft, after the layer control
-var drawControl = new L.Control.Draw({
-    position: 'topleft',
-    edit: {
-        edit: false,
-        remove: true,
-        featureGroup: drawnItems,
-        poly: {
-            allowIntersection: false
-        }
-    },
-    draw: {
-        polyline: false,
-        marker: false,
-        circlemarker: false,
-        circle: false
-    }
-});
-
-// Add scale control to bottom left
+// Add scale control
 L.control.scale({
     position: 'bottomleft',
     imperial: false
 }).addTo(map);
+
+// Initialize histogram chart
+window.globals.chart = $("#histogram").get(0).getContext("2d");
+
+var histogram_data = {
+    labels: [0, 1, 2, 3, 4, 5, 6, 7],
+    datasets: [
+        {
+            label: "Rock area count",
+            borderColor: "#ff0000",
+            pointBorderColor: "#ff0000",
+            pointBackgroundColor: "#ff0000",
+            pointHoverBackgroundColor: "#ff0000",
+            pointHoverBorderColor: "#ff0000",
+            pointBorderWidth: 1,
+            pointHoverRadius: 1,
+            pointHoverBorderWidth: 1,
+            pointRadius: 2,
+            fill: true,
+            borderWidth: 1,
+            data: [0, 0, 0, 0, 0, 0, 0],
+        }
+    ]
+};
+
+window.globals.histogram_chart = new Chart(window.globals.chart, {
+    type: 'bar',
+    data: histogram_data,
+    options: {
+        showLines: true,
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+            legend: {
+                display: false
+            }
+        },
+        scales: {
+            x: {
+                display: true,
+                title: {
+                    display: true,
+                    text: 'Area (m²)',
+                    font: {
+                        size: 10
+                    }
+                },
+                ticks: {
+                    font: {
+                        size: 9
+                    }
+                }
+            },
+            y: {
+                display: true,
+                title: {
+                    display: true,
+                    text: 'Count',
+                    font: {
+                        size: 10
+                    }
+                },
+                ticks: {
+                    font: {
+                        size: 9
+                    }
+                }
+            }
+        }
+    }
+});
 
 // Create a custom control for the histogram controls
 var HistogramControl = L.Control.extend({
@@ -389,10 +521,6 @@ new HistogramControl().addTo(map);
 
 // Add the draw control after organizing other controls
 drawControl.addTo(map);
-
-map.on('baselayerchange', function (e) {
-    window.globals.active_layer = e.name;
-});
 
 var drawnItems = L.featureGroup().addTo(map);
 
@@ -713,96 +841,6 @@ map.on('draw:deleted', function(e) {
     //         showSnackBar(JSON.parse(data).message);
     //     }
     // });
-});
-
-window.globals.chart = $("#histogram").get(0).getContext("2d");
-
-var histogram_data = {
-    labels: [0, 1, 2, 3, 4, 5, 6, 7],
-    datasets: [
-        {
-            label: "Rock area count",  // Shortened label
-            borderColor: "#ff0000",
-            pointBorderColor: "#ff0000",
-            pointBackgroundColor: "#ff0000",
-            pointHoverBackgroundColor: "#ff0000",
-            pointHoverBorderColor: "#ff0000",
-            pointBorderWidth: 1,
-            pointHoverRadius: 1,
-            pointHoverBorderWidth: 1,
-            pointRadius: 2,
-            fill: true,
-            borderWidth: 1,
-            data: [0, 0, 0, 0, 0, 0, 0],
-        }
-    ]
-};
-
-window.globals.histogram_chart = new Chart(window.globals.chart, {
-    type: 'bar',
-    data: histogram_data,
-    options: {
-        showLines: true,
-        responsive: true,
-        maintainAspectRatio: false,
-        plugins: {
-            legend: {
-                display: false  // Hide legend to save space
-            }
-        },
-        scales: {
-            x: {
-                display: true,
-                title: {
-                    display: true,
-                    text: 'Area (m²)',
-                    font: {
-                        size: 10
-                    }
-                },
-                ticks: {
-                    font: {
-                        size: 9
-                    }
-                }
-            },
-            y: {
-                display: true,
-                title: {
-                    display: true,
-                    text: 'Count',
-                    font: {
-                        size: 10
-                    }
-                },
-                ticks: {
-                    font: {
-                        size: 9
-                    }
-                }
-            }
-        }
-    }
-});
-
-map.on('moveend', function(e) {
-    bins = getBinsValue();
-    $.ajax({
-        url: "getHistogramWindow/?northeast_lat=" + map.getBounds()._northEast.lat.toString() + "&northeast_lng=" + map.getBounds()._northEast.lng.toString() + "&southwest_lat=" + map.getBounds()._southWest.lat.toString() + "&southwest_lng=" + map.getBounds()._southWest.lng.toString() + "&number_of_bins=" + bins,
-        type: "GET",
-        success: function(data) {
-            window.globals.histogram_chart.data.labels = data.x;
-            window.globals.histogram_chart.data.datasets[0].data = data.y;
-            window.globals.histogram_chart.data.datasets[0].borderColor = "#ff0000";
-            window.globals.histogram_chart.data.datasets[0].pointBorderColor = "#ff0000";
-            window.globals.histogram_chart.data.datasets[0].pointBackgroundColor = "#ff0000";
-            window.globals.histogram_chart.data.datasets[0].pointHoverBackgroundColor = "#ff0000";
-            window.globals.histogram_chart.data.datasets[0].pointHoverBorderColor = "#ff0000";
-            window.globals.histogram_chart.data.datasets[0].label = "Count per rock area in the current view window";
-            window.globals.histogram_chart.update();
-        }
-    });
-
 });
 
 function getBinsValue() {

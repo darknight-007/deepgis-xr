@@ -27,6 +27,13 @@ RUN apt-get update && apt-get install -y \
     libgeos++-dev \
     libffi-dev \
     libsqlite3-mod-spatialite \
+    # OpenCV dependencies
+    libsm6 \
+    libxext6 \
+    libxrender-dev \
+    libgl1-mesa-glx \
+    libgtk2.0-dev \
+    pkg-config \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 

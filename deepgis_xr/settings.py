@@ -125,8 +125,8 @@ REST_FRAMEWORK = {
 }
 
 # GIS Services Configuration
-VECTOR_TILES_URL = os.environ.get('VECTOR_TILES_URL', 'http://vector_tiles:8080')
-RASTER_TILES_URL = os.environ.get('RASTER_TILES_URL', 'http://raster_tiles:8081')
+VECTOR_TILES_URL = os.environ.get('VECTOR_TILES_URL', 'https://vector_tiles:8080')
+RASTER_TILES_URL = os.environ.get('RASTER_TILES_URL', 'https://raster_tiles:8081')
 
 # Custom user model
 AUTH_USER_MODEL = 'deepgis_auth.User'
@@ -150,5 +150,5 @@ TWILIO_AUTH_TOKEN = os.environ.get('TWILIO_AUTH_TOKEN', '')
 TWILIO_PHONE_NUMBER = os.environ.get('TWILIO_PHONE_NUMBER', '')
 
 # Tile server settings
-TILESERVER_URL = 'http://tileserver'
+TILESERVER_URL = 'https://tileserver'
 TILESERVER_PORT = '80' 
