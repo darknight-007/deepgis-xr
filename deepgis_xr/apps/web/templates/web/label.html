@@ -429,6 +429,14 @@
     });
 </script>
 <script type="text/javascript">
+	// Define updateZoomDisplay as a global function
+	window.updateZoomDisplay = function() {
+		if (window.globals && typeof window.globals.zoomFactor !== 'undefined') {
+			const percentage = Math.round(window.globals.zoomFactor * 100);
+			$('#zoom-level').text(`${percentage}%`);
+		}
+	};
+
 	// Setup PaperJS
 	paper.install(window);
 	
@@ -1987,7 +1995,7 @@
 				
 				// Reset zoom factor
 				globals.zoomFactor = 1;
-				updateZoomDisplay();
+				window.updateZoomDisplay();
 				
 				// Show loading overlay
 				showLoadingOverlay();
@@ -2394,68 +2402,74 @@
 			paper.view.update();
 		}
 
+		// Move updateZoomDisplay function here to make it globally accessible
+		function updateZoomDisplay() {
+			const percentage = Math.round(globals.zoomFactor * 100);
+			$('#zoom-level').text(`${percentage}%`);
+		}
+
 		// Add the grid detection function with better error handling and visual feedback
 		function startGridDetection(point) {
 			// Show loading overlay
-			showLoadingOverlay("Detecting grid...");
-			
-			// Get current image data
-			const imageData = {
-				name: currentImage ? currentImage.name : null,
-				path: currentImage ? currentImage.path : null,
-				point: {
-					x: Math.round(point.x),
-					y: Math.round(point.y)
-				}
-			};
-			
-			console.log('Starting grid detection at point:', point);
-			
-			// We no longer need the click indicator since it's automatic
-			// Just call the backend directly
-			
-			// Call to backend for grid detection
-			$.ajax({
-				url: "{% url 'detect_grid' %}",
-				type: "POST",
-				contentType: 'application/json',
-				data: JSON.stringify(imageData),
-				success: function(response) {
-					hideLoadingOverlay();
-					
-					if (response.success) {
-						// Render the detected grid
-						renderDetectedGrid(response.grid);
-						// Add the success message back that was removed
-						showSuccessMessage(`Grid detected automatically (Confidence: ${Math.round(response.grid.metrics.confidence * 100)}%)`);
+				showLoadingOverlay("Detecting grid...");
+				
+				// Get current image data
+				const imageData = {
+					name: currentImage ? currentImage.name : null,
+					path: currentImage ? currentImage.path : null,
+					point: {
+						x: Math.round(point.x),
+						y: Math.round(point.y)
+					}
+				};
+				
+				console.log('Starting grid detection at point:', point);
+				
+				// We no longer need the click indicator since it's automatic
+				// Just call the backend directly
+				
+				// Call to backend for grid detection
+				$.ajax({
+					url: "{% url 'detect_grid' %}",
+					type: "POST",
+					contentType: 'application/json',
+					data: JSON.stringify(imageData),
+					success: function(response) {
+						hideLoadingOverlay();
 						
-						// Log detailed metrics for debugging
-						console.log('Grid detection metrics:', response.grid.metrics);
-					} else {
-						// Show proper error message to user
-						let errorMsg = response.message || "Automatic grid detection failed";
-						showErrorMessage(errorMsg);
-					}
-				},
-				error: function(xhr, status, error) {
-					hideLoadingOverlay();
-					
-					// Show detailed error
-					let errorMessage = "Error in automatic grid detection";
-					try {
-						const response = JSON.parse(xhr.responseText);
-						if (response && response.message) {
-							errorMessage = `Grid detection error: ${response.message}`;
+						if (response.success) {
+							// Render the detected grid
+							renderDetectedGrid(response.grid);
+							// Add the success message back that was removed
+							showSuccessMessage(`Grid detected automatically (Confidence: ${Math.round(response.grid.metrics.confidence * 100)}%)`);
+							
+							// Log detailed metrics for debugging
+							console.log('Grid detection metrics:', response.grid.metrics);
+						} else {
+							// Show proper error message to user
+							let errorMsg = response.message || "Automatic grid detection failed";
+							showErrorMessage(errorMsg);
 						}
-					} catch (e) {
-						errorMessage = `Grid detection error: ${error || xhr.statusText}`;
+					},
+					error: function(xhr, status, error) {
+						hideLoadingOverlay();
+						
+						// Show detailed error
+						let errorMessage = "Error in automatic grid detection";
+						try {
+							const response = JSON.parse(xhr.responseText);
+							if (response && response.message) {
+								errorMessage = `Grid detection error: ${response.message}`;
+							}
+						} catch (e) {
+							errorMessage = `Grid detection error: ${error || xhr.statusText}`;
+						}
+						
+						showErrorMessage(errorMessage);
+						console.error("Grid detection error details:", xhr.responseText);
 					}
-					
-					showErrorMessage(errorMessage);
-					console.error("Grid detection error details:", xhr.responseText);
-				}
-			});
-		}
+				});
+			}
 
 		// Improved function to render the detected grid with visual enhancements
 		function renderDetectedGrid(gridData) {
@@ -2677,6 +2691,32 @@
 				}
 			}
 			
+			// First, ensure zoom level is set to 100% before proceeding
+			console.log('Setting zoom level to 100% before PDF export');
+			// Save current zoom level to restore later if needed
+			const originalZoomFactor = globals.zoomFactor;
+			
+			// Reset the zoom factor to 100%
+			globals.zoomFactor = 1;
+			
+			// Update zoom display manually instead of calling updateZoomDisplay
+			const percentage = Math.round(globals.zoomFactor * 100);
+			$('#zoom-level').text(`${percentage}%`);
+			
+			// Apply zoom to the view
+			paper.view.zoom = 1;
+			
+			
+			// Reset view center to ensure image is properly positioned
+			if (globals.raster) {
+				paper.view.center = globals.raster.position;
+			} else {
+				paper.view.center = globals.initialCenter.clone();
+			}
+			
+			// Update the view to ensure changes are applied
+			paper.view.update();
+			
 			// Check if we have grid metrics for accurate scaling
 			if (!globals.gridMetrics || !globals.gridMetrics.realWorldScale) {
 				showWarningMessage("No grid metrics available. Scale may not be accurate in the PDF.");
@@ -2805,6 +2845,16 @@
 					item.visible = visible;
 				}
 			});
+			
+			// Restore original zoom level if needed
+			if (originalZoomFactor !== 1) {
+				globals.zoomFactor = originalZoomFactor;
+				paper.view.zoom = originalZoomFactor;
+				
+				// Update zoom display manually
+				const restorePercentage = Math.round(globals.zoomFactor * 100);
+				$('#zoom-level').text(`${restorePercentage}%`);
+			}
 			
 			// Update the view
 			paper.view.update();
