@@ -5,6 +5,8 @@ urlpatterns = [
     # Main pages
     path('', views.index, name='index'),
     path('label/', views.label, name='label'),
+    path('label/3d/', views.label_3d, name='label_3d'),
+    path('stl-viewer/', views.stl_viewer, name='stl_viewer'),
     path('map-label/', views.map_label, name='map_label'),
     path('view-label/', views.view_label, name='view_label'),
     path('results/', views.results, name='results'),
@@ -24,4 +26,8 @@ urlpatterns = [
     
     # Grid detection endpoint
     path('webclient/detect-grid', views.detect_grid, name='detect_grid'),
+    
+    # 3D model endpoints
+    path('webclient/get-3d-model', views.get_3d_model, name='get_3d_model'),
+    path('webclient/list-stl-models', views.list_stl_models, name='list_stl_models'),
 ] 

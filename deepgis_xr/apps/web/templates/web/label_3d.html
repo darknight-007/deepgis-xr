@@ -1,0 +1,1772 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block content %}
+
+<style>
+    /* Main layout styles */
+    .wrapper {
+        display: flex;
+        flex-direction: column;
+        height: calc(100vh - 56px); /* Account for navbar */
+        overflow: hidden;
+    }
+
+    .main-content {
+        display: flex;
+        flex: 1;
+        overflow: hidden;
+    }
+
+    .control-sidebar {
+        width: 300px;
+        padding: 15px;
+        background-color: #f8f9fa;
+        border-left: 1px solid #e9ecef;
+        overflow-y: auto;
+        display: flex;
+        flex-direction: column;
+    }
+
+    #canvasContainer {
+        flex: 1;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background-color: #e9ecef;
+        position: relative;
+        overflow: hidden;
+    }
+
+    #modelsList {
+        list-style: none;
+        padding: 0;
+        margin: 0 0 15px 0;
+        overflow-y: auto;
+        max-height: 300px;
+    }
+
+    #modelsList li {
+        padding: 8px 10px;
+        margin-bottom: 5px;
+        background-color: #fff;
+        border-radius: 4px;
+        border: 1px solid #ddd;
+        cursor: pointer;
+    }
+
+    #modelsList li:hover {
+        background-color: #f5f5f5;
+    }
+
+    #modelsList li.active {
+        background-color: #e3f2fd;
+        border-color: #90caf9;
+    }
+
+    .footer-bar {
+        padding: 10px 15px;
+        background-color: #f8f9fa;
+        border-top: 1px solid #e9ecef;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        height: 60px;
+    }
+
+    .tool-buttons {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        margin-bottom: 15px;
+    }
+
+    .tool-buttons button {
+        flex: 1 0 auto;
+        min-width: 95px;
+    }
+
+    .status-info {
+        font-size: 12px;
+        color: #555;
+    }
+
+    /* Color picker for annotations */
+    .annotation-color {
+        width: 20px;
+        height: 20px;
+        border-radius: 50%;
+        display: inline-block;
+        margin-right: 10px;
+        vertical-align: middle;
+    }
+
+    /* Annotation list styles */
+    #annotations-list {
+        list-style: none;
+        padding: 0;
+        margin: 10px 0;
+        max-height: 250px;
+        overflow-y: auto;
+    }
+
+    .annotation-item {
+        padding: 8px;
+        margin-bottom: 5px;
+        background-color: #fff;
+        border-radius: 4px;
+        border: 1px solid #ddd;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        transition: background-color 0.2s;
+    }
+
+    .annotation-item:hover {
+        background-color: #f5f5f5;
+    }
+
+    .annotation-info {
+        display: flex;
+        align-items: center;
+        gap: 5px;
+    }
+
+    .annotation-color {
+        width: 16px;
+        height: 16px;
+        border-radius: 50%;
+        display: inline-block;
+        margin-right: 5px;
+        vertical-align: middle;
+        border: 1px solid rgba(0,0,0,0.1);
+    }
+
+    .annotation-label {
+        font-size: 0.85rem;
+    }
+
+    .annotation-actions {
+        display: flex;
+        gap: 5px;
+    }
+
+    .annotation-actions button {
+        border: none;
+        background: none;
+        cursor: pointer;
+        font-size: 14px;
+        color: #666;
+        padding: 2px 5px;
+        border-radius: 3px;
+        transition: all 0.2s;
+    }
+
+    .annotation-actions button:hover {
+        color: #000;
+        background-color: #e9ecef;
+    }
+
+    /* Loading overlay */
+    #loading-overlay {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background-color: rgba(0, 0, 0, 0.5);
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        z-index: 9999;
+    }
+
+    .spinner-border {
+        display: inline-block;
+        width: 3rem;
+        height: 3rem;
+        vertical-align: text-bottom;
+        border: 0.25em solid rgba(255, 255, 255, 0.5);
+        border-right-color: #fff;
+        border-radius: 50%;
+        animation: spin .75s linear infinite;
+    }
+
+    @keyframes spin {
+        0% { transform: rotate(0deg); }
+        100% { transform: rotate(360deg); }
+    }
+
+    /* Debug Console */
+    .debug-console {
+        position: fixed;
+        bottom: 20px;
+        right: 20px;
+        width: 450px;
+        height: 200px;
+        background-color: rgba(0, 0, 0, 0.8);
+        color: white;
+        border-radius: 5px;
+        font-family: monospace;
+        z-index: 10000;
+        display: flex;
+        flex-direction: column;
+        transition: all 0.3s;
+        box-shadow: 0 0 10px rgba(0, 0, 0, 0.5);
+        font-size: 12px;
+        opacity: 0.9;
+    }
+
+    .debug-console.collapsed {
+        height: 30px;
+        width: 200px;
+        opacity: 0.7;
+    }
+
+    .debug-console:hover {
+        opacity: 1;
+    }
+
+    .debug-console-header {
+        background-color: #333;
+        padding: 5px 10px;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        cursor: pointer;
+        border-radius: 5px 5px 0 0;
+        user-select: none;
+    }
+
+    .debug-console-title {
+        font-weight: bold;
+        font-size: 12px;
+    }
+
+    .debug-console-actions {
+        display: flex;
+        gap: 5px;
+    }
+
+    .debug-console-actions button {
+        background: none;
+        border: none;
+        color: #aaa;
+        cursor: pointer;
+        font-size: 12px;
+        padding: 0;
+        width: 16px;
+        height: 16px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        border-radius: 3px;
+    }
+
+    .debug-console-actions button:hover {
+        color: white;
+        background-color: rgba(255, 255, 255, 0.1);
+    }
+
+    .debug-console-body {
+        padding: 5px;
+        overflow-y: auto;
+        flex-grow: 1;
+        font-size: 11px;
+    }
+
+    .debug-console.collapsed .debug-console-body {
+        display: none;
+    }
+
+    .debug-message {
+        margin: 2px 0;
+        padding: 2px 4px;
+        border-radius: 2px;
+        word-wrap: break-word;
+        font-size: 11px;
+        line-height: 1.3;
+    }
+
+    .debug-message.error {
+        color: #ffcccc;
+        background-color: rgba(255, 0, 0, 0.15);
+        border-left: 2px solid #ff5555;
+    }
+
+    .debug-message.success {
+        color: #ccffcc;
+        background-color: rgba(0, 255, 0, 0.15);
+        border-left: 2px solid #55ff55;
+    }
+
+    .debug-message.warning {
+        color: #ffffcc;
+        background-color: rgba(255, 255, 0, 0.15);
+        border-left: 2px solid #ffff55;
+    }
+
+    .debug-message .timestamp {
+        color: #aaa;
+        margin-right: 5px;
+        font-size: 10px;
+    }
+</style>
+
+<div class="wrapper">
+    <div class="main-content">
+        <!-- Canvas Container -->
+        <div id="canvasContainer">
+            <div id="scene-container"></div>
+        </div>
+
+        <!-- Right Sidebar -->
+        <div class="control-sidebar">
+            <h5>3D Model Information</h5>
+            <div class="card mb-3">
+                <div class="card-body p-2">
+                    <p id="model_info_name" class="mb-1 small">Model: </p>
+                    <p id="model_info_vertices" class="mb-1 small">Vertices: </p>
+                    <p id="model_info_triangles" class="mb-1 small">Triangles: </p>
+                </div>
+            </div>
+
+            <h5>Available Models</h5>
+            <ul id="modelsList"></ul>
+
+            <h5>Annotation Tools</h5>
+            <div class="tool-buttons">
+                <button class="btn btn-sm btn-outline-primary" id="point_button" title="Add point annotation">
+                    <i class="fas fa-map-marker-alt"></i> Point
+                </button>
+                <button class="btn btn-sm btn-outline-primary" id="line_button" title="Add line annotation">
+                    <i class="fas fa-ruler"></i> Line
+                </button>
+                <button class="btn btn-sm btn-outline-primary" id="area_button" title="Add area annotation">
+                    <i class="fas fa-draw-polygon"></i> Area
+                </button>
+                <button class="btn btn-sm btn-outline-primary" id="measure_button" title="Measure distance">
+                    <i class="fas fa-tape"></i> Measure
+                </button>
+                <button class="btn btn-sm btn-outline-danger" id="remove_button" title="Remove annotation">
+                    <i class="fas fa-eraser"></i> Remove
+                </button>
+                <button class="btn btn-sm btn-outline-secondary" id="undo_button" title="Undo last action">
+                    <i class="fas fa-undo"></i> Undo
+                </button>
+            </div>
+
+            <h5>Annotation Color</h5>
+            <div class="mb-3 d-flex align-items-center">
+                <input type="color" id="annotation-color" value="#ff0000" class="form-control form-control-sm me-2">
+                <span class="small text-muted">Select color for new annotations</span>
+            </div>
+
+            <h5>Annotations</h5>
+            <ul id="annotations-list">
+                <!-- Annotations will be added dynamically -->
+            </ul>
+
+            <h5>Actions</h5>
+            <div class="tool-buttons mb-3">
+                <!-- Main action buttons -->
+                <div class="d-flex mb-2">
+                    <button class="btn btn-sm btn-success flex-fill me-1" id="save_button">
+                        <i class="fas fa-save"></i> Save
+                    </button>
+                    <button class="btn btn-sm btn-primary flex-fill" id="screenshot_button">
+                        <i class="fas fa-camera"></i> Screenshot
+                    </button>
+                </div>
+                <div class="d-flex mb-2">
+                    <button class="btn btn-sm btn-danger flex-fill" id="clear_button">
+                        <i class="fas fa-trash-alt"></i> Clear All
+                    </button>
+                </div>
+                
+                <!-- View controls -->
+                <h6 class="mt-3 mb-2">View Controls</h6>
+                <div class="d-flex align-items-center mb-2">
+                    <button class="btn btn-sm btn-outline-secondary flex-fill me-1" id="reset-view">
+                        <i class="fas fa-sync-alt"></i> Reset View
+                    </button>
+                    <button class="btn btn-sm btn-outline-secondary flex-fill" id="toggle-wireframe">
+                        <i class="fas fa-vector-square"></i> Wireframe
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Footer -->
+    <div class="footer-bar">
+        <div class="status-info w-100">
+            <span id="coords-info">Coordinates: </span> | 
+            <span id="measure-info">Measurement: </span> | 
+            <span id="view-mode">View Mode: Orbit</span>
+        </div>
+    </div>
+</div>
+
+<!-- Debug Console -->
+<div id="debug-console" class="debug-console">
+    <div class="debug-console-header">
+        <div class="debug-console-title">Debug Console</div>
+        <div class="debug-console-actions">
+            <button id="clear-console" title="Clear console">🗑️</button>
+            <button id="toggle-console" title="Toggle console">▼</button>
+        </div>
+    </div>
+    <div class="debug-console-body" id="debug-console-body"></div>
+</div>
+
+<!-- Loading Overlay -->
+<div id="loading-overlay" style="display: none;">
+    <div class="spinner-border" role="status">
+        <span class="sr-only">Loading...</span>
+    </div>
+</div>
+
+<!-- JavaScript libraries -->
+<script src="https://code.jquery.com/jquery-3.6.0.min.js" integrity="sha256-/xUj+3OJU5yExlq6GSYGSHk7tPXikynS7ogEvDej/m4=" crossorigin="anonymous"></script>
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.0.2/dist/js/bootstrap.bundle.min.js" integrity="sha384-MrcW6ZMFYlzcLA8Nl+NtUVF0sA7MsXsP1UyJoMp4YLEuNSfAP+JcXn/tWtIaxVXM" crossorigin="anonymous"></script>
+
+<!-- Font Awesome -->
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" integrity="sha512-iecdLmaskl7CVkqkXNQ/ZH/XLlvWZOJyj7Yy7tcenmpD1ypASozpmT/E0iPtmFIB46ZmdtAc9eNBvH0H/ZpiBw==" crossorigin="anonymous" referrerpolicy="no-referrer" />
+
+<!-- Three.js libraries -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/STLLoader.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/exporters/STLExporter.js"></script>
+
+<script>
+    // Global variables
+    const globals = {
+        scene: null,
+        camera: null,
+        renderer: null,
+        controls: null,
+        currentModel: null,
+        stlLoader: null,
+        annotations: [],
+        undoStack: [],
+        currentTool: null,
+        annotationColor: "#ff0000",
+        raycaster: new THREE.Raycaster(),
+        mouse: new THREE.Vector2(),
+        pointSize: 0.1,
+        lineWidth: 0.02,
+        measurePoints: [],
+        isDragging: false,
+        wireframeMode: false,
+        debugEnabled: true
+    };
+
+    // Initialize debug console
+    $(document).ready(function() {
+        // Debug console controls
+        $('#toggle-console').click(function(e) {
+            e.stopPropagation();
+            $('#debug-console').toggleClass('collapsed');
+            $(this).text($('#debug-console').hasClass('collapsed') ? '▲' : '▼');
+        });
+        
+        $('#clear-console').click(function(e) {
+            e.stopPropagation();
+            $('#debug-console-body').empty();
+        });
+        
+        $('.debug-console-header').click(function() {
+            $('#toggle-console').click();
+        });
+        
+        // Show initial message
+        showSuccessMessage('3D Model Labeler initialized');
+        
+        // Initialize Three.js scene
+        initScene();
+        
+        // Load models list from server
+        loadModelsList();
+    });
+
+    // Initialize debug message functions
+    function showNotification(message, type = 'error', duration = 5000) {
+        // Get current timestamp
+        const now = new Date();
+        const timestamp = now.toLocaleTimeString();
+        
+        // Generate a unique ID for this message
+        const messageId = 'msg-' + Date.now();
+        
+        // Create message element with timestamp
+        const messageHTML = `
+            <div id="${messageId}" class="debug-message ${type}">
+                <span class="timestamp">[${timestamp}]</span> ${message}
+            </div>
+        `;
+        
+        // Add to debug console
+        $('#debug-console-body').append(messageHTML);
+        
+        // Scroll to bottom
+        const consoleBody = document.getElementById('debug-console-body');
+        consoleBody.scrollTop = consoleBody.scrollHeight;
+        
+        // Log to browser console as well
+        if (type === 'error') {
+            console.error(message);
+        } else if (type === 'warning') {
+            console.warn(message);
+        } else {
+            console.log(message);
+        }
+    }
+
+    function showErrorMessage(message, duration = 5000) {
+        showNotification(message, 'error', duration);
+    }
+
+    function showSuccessMessage(message, duration = 5000) {
+        showNotification(message, 'success', duration);  
+    }
+
+    function showWarningMessage(message, duration = 5000) {
+        showNotification(message, 'warning', duration);
+    }
+
+    // Show/hide loading overlay
+    function showLoadingOverlay(message = "Loading...") {
+        $('#loading-overlay').show();
+    }
+    
+    function hideLoadingOverlay() {
+        $('#loading-overlay').hide();
+    }
+
+    // Initialize Three.js scene
+    function initScene() {
+        try {
+            // Get container
+            const container = document.getElementById('scene-container');
+            
+            // Create scene
+            globals.scene = new THREE.Scene();
+            globals.scene.background = new THREE.Color(0x111111);
+            
+            // Create camera
+            const aspect = container.clientWidth / container.clientHeight;
+            globals.camera = new THREE.PerspectiveCamera(75, aspect, 0.1, 1000);
+            globals.camera.position.set(10, 10, 10);
+            
+            // Create renderer
+            globals.renderer = new THREE.WebGLRenderer({ antialias: true });
+            globals.renderer.setSize(container.clientWidth, container.clientHeight);
+            globals.renderer.setPixelRatio(window.devicePixelRatio);
+            container.appendChild(globals.renderer.domElement);
+            
+            // Add orbit controls
+            globals.controls = new THREE.OrbitControls(globals.camera, globals.renderer.domElement);
+            globals.controls.enableDamping = true;
+            globals.controls.dampingFactor = 0.05;
+            
+            // Add lights
+            const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
+            globals.scene.add(ambientLight);
+            
+            const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
+            directionalLight.position.set(10, 10, 10);
+            globals.scene.add(directionalLight);
+            
+            const backLight = new THREE.DirectionalLight(0xffffff, 0.3);
+            backLight.position.set(-10, 5, -10);
+            globals.scene.add(backLight);
+            
+            // Add coordinate axes
+            const axesHelper = new THREE.AxesHelper(5);
+            globals.scene.add(axesHelper);
+            
+            // Add grid
+            const gridHelper = new THREE.GridHelper(20, 20);
+            globals.scene.add(gridHelper);
+            
+            // Initialize STL loader
+            globals.stlLoader = new THREE.STLLoader();
+            
+            // Setup event listeners
+            window.addEventListener('resize', onWindowResize);
+            
+            // Add mouse event listeners for raycasting
+            globals.renderer.domElement.addEventListener('mousemove', onMouseMove);
+            globals.renderer.domElement.addEventListener('mousedown', onMouseDown);
+            globals.renderer.domElement.addEventListener('mouseup', onMouseUp);
+            
+            // Start animation loop
+            animate();
+            
+            // Setup tool buttons
+            setupToolButtons();
+            
+            showSuccessMessage('Three.js scene initialized');
+        } catch (error) {
+            showErrorMessage('Error initializing scene: ' + error.message);
+        }
+    }
+
+    // Handle window resize
+    function onWindowResize() {
+        const container = document.getElementById('scene-container');
+        globals.camera.aspect = container.clientWidth / container.clientHeight;
+        globals.camera.updateProjectionMatrix();
+        globals.renderer.setSize(container.clientWidth, container.clientHeight);
+    }
+
+    // Animation loop
+    function animate() {
+        requestAnimationFrame(animate);
+        
+        // Update controls
+        globals.controls.update();
+        
+        // Render scene
+        globals.renderer.render(globals.scene, globals.camera);
+    }
+
+    // Load available STL models from server
+    function loadModelsList() {
+        showLoadingOverlay();
+        
+        // Clear the models list
+        const modelsList = $('#modelsList');
+        modelsList.empty();
+
+        // Function to create a nice display name from filename
+        function createDisplayName(filename) {
+            // Remove file extension
+            let name = filename.replace('.stl', '');
+            // Replace dashes and underscores with spaces
+            name = name.replace(/[-_]/g, ' ');
+            // Capitalize first letter of each word
+            return name.replace(/\b\w/g, l => l.toUpperCase());
+        }
+
+        // Function to update model list with found STL files
+        function updateModelsList(models) {
+            // Clear current list
+            modelsList.empty();
+            
+            if (models.length === 0) {
+                showWarningMessage('No STL models found');
+                hideLoadingOverlay();
+                return;
+            }
+            
+            // Add each model to the list
+            models.forEach((model, index) => {
+                const displayName = createDisplayName(model.file);
+                const isActive = index === 0 ? 'active' : '';
+                
+                modelsList.append(`
+                    <li data-id="${model.id}" data-name="${displayName}" data-file="${model.file}" class="${isActive}">
+                        ${displayName}
+                    </li>
+                `);
+            });
+            
+            // Add click handler for model selection
+            modelsList.find('li').click(function() {
+                modelsList.find('li').removeClass('active');
+                $(this).addClass('active');
+                
+                const modelId = $(this).data('id');
+                loadModel(modelId);
+            });
+            
+            // Load the first model automatically
+            if (models.length > 0) {
+                loadModel(models[0].id);
+            }
+            
+            showSuccessMessage(`Found ${models.length} STL models`);
+            hideLoadingOverlay();
+        }
+
+        // Try to fetch models list from server API first
+        $.ajax({
+            url: "{% url 'list_stl_models' %}",
+            type: "GET",
+            success: function(data) {
+                if (data.success && data.models && data.models.length > 0) {
+                    updateModelsList(data.models);
+                } else {
+                    // If server API fails, fall back to our known model
+                    scanStaticFilesDirectory();
+                }
+            },
+            error: function(xhr, status, error) {
+                console.log('Error loading models from server API: ' + error);
+                // Fall back to scanning static files directory
+                scanStaticFilesDirectory();
+            }
+        });
+        
+        // Function to scan for STL files
+        function scanStaticFilesDirectory() {
+            showWarningMessage("Scanning for STL files in staticfiles directory");
+            
+            // Create local models array with the one we know exists
+            const models = [{
+                id: 'navagunjara-reborn-gometric-analysis',
+                name: 'Navagunjara Model',
+                file: 'navagunjara-reborn-gometric-analysis.stl'
+            }];
+            
+            // Update the model list with what we found
+            updateModelsList(models);
+            
+            // Make a request to potentially scan for more STL files
+            // This would be handled by an extra endpoint you could add
+            $.ajax({
+                url: "/webclient/scan-stl-files",
+                type: "GET",
+                success: function(data) {
+                    if (data.success && data.models && data.models.length > 0) {
+                        // If we got more models, update the list again
+                        updateModelsList(data.models);
+                    }
+                },
+                error: function(xhr, status, error) {
+                    // This is expected to fail if endpoint doesn't exist yet
+                    console.log('STL directory scan not implemented: ' + error);
+                }
+            });
+        }
+    }
+
+    // Function to check if a file exists
+    function checkFileExists(url) {
+        return new Promise((resolve, reject) => {
+            const xhr = new XMLHttpRequest();
+            xhr.open('HEAD', url, true);
+            xhr.onreadystatechange = function() {
+                if (xhr.readyState === 4) {
+                    if (xhr.status === 200) {
+                        resolve(true);
+                    } else {
+                        resolve(false);
+                    }
+                }
+            };
+            xhr.onerror = function() {
+                resolve(false);
+            };
+            xhr.send();
+        });
+    }
+
+    // Load a specific STL model by ID
+    function loadModel(modelId) {
+        try {
+            showLoadingOverlay();
+            
+            // First try loading from staticfiles
+            const staticfilesUrl = window.location.protocol + '//' + window.location.host + '/static/deepgis/models/stl/';
+            const modelFile = $('#modelsList li.active').data('file') || `${modelId}.stl`;
+            const modelUrl = staticfilesUrl + modelFile;
+            
+            showWarningMessage(`Checking if model exists: ${modelUrl}`);
+                
+            // Clear previous model if exists
+            if (globals.currentModel) {
+                globals.scene.remove(globals.currentModel);
+                globals.currentModel = null;
+            }
+            
+            // Check if the file exists before trying to load it
+            checkFileExists(modelUrl).then(exists => {
+                if (exists) {
+                    showSuccessMessage(`Model file found at: ${modelUrl}`);
+                    loadSTLFile(modelUrl);
+                } else {
+                    // Try alternate URL from static directory
+                    const staticUrl = "{% static 'models/stl/' %}" + modelFile;
+                    showWarningMessage(`First URL failed, checking alternate URL: ${staticUrl}`);
+                    
+                    checkFileExists(staticUrl).then(staticExists => {
+                        if (staticExists) {
+                            showSuccessMessage(`Model file found at alternate location: ${staticUrl}`);
+                            loadSTLFile(staticUrl);
+                        } else {
+                            showErrorMessage('Could not find STL file at either location');
+                            createFallbackModel();
+                        }
+                    });
+                }
+            }).catch(error => {
+                showErrorMessage('Error checking file existence: ' + error.message);
+                createFallbackModel();
+            });
+        } catch (error) {
+            hideLoadingOverlay();
+            showErrorMessage('Error in loadModel function: ' + error.message);
+            createFallbackModel();
+        }
+        
+        // Function to actually load the STL file
+        function loadSTLFile(url) {
+            // Load the STL model
+            globals.stlLoader.load(
+                url,
+                function(geometry) {
+                    handleSuccessfulModelLoad(geometry);
+                },
+                function(xhr) {
+                    // Progress
+                    const percent = Math.round((xhr.loaded / xhr.total) * 100);
+                    if (percent % 10 === 0) {
+                        console.log(`Loading model: ${percent}%`);
+                    }
+                },
+                function(error) {
+                    hideLoadingOverlay();
+                    showErrorMessage('Error loading model: ' + error.message);
+                    createFallbackModel();
+                }
+            );
+        }
+        
+        // Helper function for successful model loading
+        function handleSuccessfulModelLoad(geometry) {
+            const material = new THREE.MeshPhongMaterial({
+                color: 0xcccccc,
+                specular: 0x111111,
+                shininess: 200
+            });
+            
+            const mesh = new THREE.Mesh(geometry, material);
+            geometry.computeBoundingBox();
+            const boundingBox = geometry.boundingBox;
+            const center = new THREE.Vector3();
+            boundingBox.getCenter(center);
+            
+            mesh.position.set(-center.x, -center.y, -center.z);
+            globals.currentModel = mesh;
+            globals.scene.add(mesh);
+            
+            const activeModel = $('#modelsList li.active');
+            $('#model_info_name').text(`Model: ${activeModel.data('name')}`);
+            $('#model_info_vertices').text(`Vertices: ${geometry.attributes.position.count}`);
+            $('#model_info_triangles').text(`Triangles: ${geometry.attributes.position.count / 3}`);
+            
+            fitCameraToModel(mesh);
+            hideLoadingOverlay();
+            showSuccessMessage(`Loaded model: ${activeModel.data('name')}`);
+        }
+    }
+    
+    // Create a fallback model (cube) if loading fails
+    function createFallbackModel() {
+        const geometry = new THREE.BoxGeometry(2, 2, 2);
+        const material = new THREE.MeshPhongMaterial({
+            color: 0xcccccc,
+            specular: 0x111111,
+            shininess: 200
+        });
+        
+        const cube = new THREE.Mesh(geometry, material);
+        globals.currentModel = cube;
+        globals.scene.add(cube);
+        
+        $('#model_info_name').text('Model: Fallback Cube');
+        $('#model_info_vertices').text('Vertices: 8');
+        $('#model_info_triangles').text('Triangles: 12');
+        
+        showWarningMessage('Using fallback cube model since STL loading failed');
+    }
+
+    // Fit camera to view the entire model
+    function fitCameraToModel(model) {
+        // Compute bounding box
+        const boundingBox = new THREE.Box3().setFromObject(model);
+        const center = new THREE.Vector3();
+        const size = new THREE.Vector3();
+        
+        boundingBox.getCenter(center);
+        boundingBox.getSize(size);
+        
+        // Calculate maximum dimension
+        const maxDim = Math.max(size.x, size.y, size.z);
+        const fov = globals.camera.fov * (Math.PI / 180);
+        const cameraDistance = maxDim / (2 * Math.tan(fov / 2));
+        
+        // Set camera position based on the center and size
+        const direction = new THREE.Vector3(1, 1, 1).normalize();
+        globals.camera.position.copy(center.clone().add(direction.multiplyScalar(cameraDistance * 1.5)));
+        globals.camera.lookAt(center);
+        
+        // Update controls target
+        globals.controls.target.copy(center);
+        globals.controls.update();
+    }
+
+    // Setup tool buttons
+    function setupToolButtons() {
+        // Annotation tools
+        $('#point_button').click(function() {
+            setActiveTool('point', this);
+            showSuccessMessage('Point annotation tool activated');
+        });
+        
+        $('#line_button').click(function() {
+            setActiveTool('line', this);
+            showSuccessMessage('Line annotation tool activated');
+        });
+        
+        $('#area_button').click(function() {
+            setActiveTool('area', this);
+            showSuccessMessage('Area annotation tool activated');
+        });
+        
+        $('#measure_button').click(function() {
+            setActiveTool('measure', this);
+            showSuccessMessage('Measurement tool activated');
+        });
+        
+        $('#remove_button').click(function() {
+            setActiveTool('remove', this);
+            showSuccessMessage('Remove tool activated');
+        });
+        
+        // Undo button
+        $('#undo_button').click(function() {
+            undoLastOperation();
+        });
+        
+        // View controls
+        $('#reset-view').click(function() {
+            resetView();
+        });
+        
+        $('#toggle-wireframe').click(function() {
+            toggleWireframe();
+        });
+        
+        // Action buttons
+        $('#save_button').click(function() {
+            saveAnnotations();
+        });
+        
+        $('#screenshot_button').click(function() {
+            takeScreenshot();
+        });
+        
+        $('#clear_button').click(function() {
+            if (confirm('Are you sure you want to clear all annotations?')) {
+                clearAnnotations();
+            }
+        });
+        
+        // Annotation color
+        $('#annotation-color').on('change', function() {
+            globals.annotationColor = $(this).val();
+            showSuccessMessage(`Annotation color changed to ${globals.annotationColor}`);
+        });
+    }
+
+    // Set active tool
+    function setActiveTool(tool, button) {
+        // Reset previous tool button states
+        $('.tool-buttons button').removeClass('active');
+        
+        // Set active state for current tool
+        $(button).addClass('active');
+        
+        // Set current tool
+        globals.currentTool = tool;
+        
+        // Reset any ongoing operations
+        globals.measurePoints = [];
+    }
+
+    // Mouse event handlers
+    function onMouseMove(event) {
+        // Calculate mouse position in normalized device coordinates (-1 to +1)
+        const rect = event.target.getBoundingClientRect();
+        globals.mouse.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
+        globals.mouse.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
+        
+        // Update raycaster
+        globals.raycaster.setFromCamera(globals.mouse, globals.camera);
+        
+        // Show coordinates in footer
+        updateCoordinatesDisplay();
+    }
+    
+    function onMouseDown(event) {
+        if (event.button !== 0) return; // Only handle left mouse button
+        
+        globals.isDragging = true;
+        
+        // Handle different tools
+        switch (globals.currentTool) {
+            case 'point':
+                addPointAnnotation();
+                break;
+            case 'line':
+                startLineAnnotation();
+                break;
+            case 'area':
+                startAreaAnnotation();
+                break;
+            case 'measure':
+                startMeasurement();
+                break;
+            case 'remove':
+                removeAnnotation();
+                break;
+        }
+    }
+    
+    function onMouseUp(event) {
+        if (event.button !== 0) return; // Only handle left mouse button
+        
+        globals.isDragging = false;
+        
+        // Handle different tools
+        switch (globals.currentTool) {
+            case 'line':
+                finishLineAnnotation();
+                break;
+            case 'area':
+                finishAreaAnnotation();
+                break;
+            case 'measure':
+                finishMeasurement();
+                break;
+        }
+    }
+    
+    // Update coordinates display in footer
+    function updateCoordinatesDisplay() {
+        if (!globals.currentModel) return;
+        
+        // Raycast to find intersection with model
+        const intersects = globals.raycaster.intersectObject(globals.currentModel);
+        
+        if (intersects.length > 0) {
+            const intersection = intersects[0];
+            const point = intersection.point;
+            $('#coords-info').text(`Coordinates: X: ${point.x.toFixed(2)}, Y: ${point.y.toFixed(2)}, Z: ${point.z.toFixed(2)}`);
+        } else {
+            $('#coords-info').text('Coordinates: No intersection');
+        }
+    }
+    
+    // Point annotation functions
+    function addPointAnnotation() {
+        if (!globals.currentModel) {
+            showWarningMessage('No model loaded');
+            return;
+        }
+        
+        // Raycast to find intersection with model
+        const intersects = globals.raycaster.intersectObject(globals.currentModel);
+        
+        if (intersects.length > 0) {
+            const intersection = intersects[0];
+            const point = intersection.point;
+            
+            // Create sphere to represent point annotation
+            const geometry = new THREE.SphereGeometry(globals.pointSize);
+            const material = new THREE.MeshBasicMaterial({
+                color: new THREE.Color(globals.annotationColor)
+            });
+            const sphere = new THREE.Mesh(geometry, material);
+            sphere.position.copy(point);
+            
+            // Create label for the point
+            const annotationId = 'annotation_' + Date.now();
+            
+            // Add metadata to the annotation
+            sphere.userData = {
+                type: 'point',
+                id: annotationId,
+                color: globals.annotationColor,
+                position: { x: point.x, y: point.y, z: point.z }
+            };
+            
+            // Add annotation to scene
+            globals.scene.add(sphere);
+            globals.annotations.push(sphere);
+            
+            // Add to undo stack
+            globals.undoStack.push({
+                action: 'add',
+                object: sphere
+            });
+            
+            // Add to annotations list in UI
+            addAnnotationToList(sphere);
+            
+            showSuccessMessage('Point annotation added');
+        } else {
+            showWarningMessage('No intersection with model');
+        }
+    }
+    
+    // Line annotation functions
+    let lineStartPoint = null;
+    let lineMaterial = null;
+    
+    function startLineAnnotation() {
+        if (!globals.currentModel) {
+            showWarningMessage('No model loaded');
+            return;
+        }
+        
+        // Raycast to find intersection with model
+        const intersects = globals.raycaster.intersectObject(globals.currentModel);
+        
+        if (intersects.length > 0) {
+            const intersection = intersects[0];
+            lineStartPoint = intersection.point.clone();
+            
+            // Create material for the line
+            lineMaterial = new THREE.LineBasicMaterial({
+                color: new THREE.Color(globals.annotationColor),
+                linewidth: 2
+            });
+        }
+    }
+    
+    function finishLineAnnotation() {
+        if (!lineStartPoint || !globals.currentModel) {
+            return;
+        }
+        
+        // Raycast to find intersection with model
+        const intersects = globals.raycaster.intersectObject(globals.currentModel);
+        
+        if (intersects.length > 0) {
+            const intersection = intersects[0];
+            const endPoint = intersection.point.clone();
+            
+            // Create line geometry
+            const geometry = new THREE.BufferGeometry().setFromPoints([
+                lineStartPoint,
+                endPoint
+            ]);
+            
+            // Create line object
+            const line = new THREE.Line(geometry, lineMaterial);
+            
+            // Create annotation ID
+            const annotationId = 'annotation_' + Date.now();
+            
+            // Add metadata to the annotation
+            line.userData = {
+                type: 'line',
+                id: annotationId,
+                color: globals.annotationColor,
+                start: { x: lineStartPoint.x, y: lineStartPoint.y, z: lineStartPoint.z },
+                end: { x: endPoint.x, y: endPoint.y, z: endPoint.z },
+                length: lineStartPoint.distanceTo(endPoint)
+            };
+            
+            // Add annotation to scene
+            globals.scene.add(line);
+            globals.annotations.push(line);
+            
+            // Add to undo stack
+            globals.undoStack.push({
+                action: 'add',
+                object: line
+            });
+            
+            // Add to annotations list in UI
+            addAnnotationToList(line);
+            
+            showSuccessMessage(`Line annotation added (Length: ${line.userData.length.toFixed(2)})`);
+        }
+        
+        // Reset line annotation variables
+        lineStartPoint = null;
+        lineMaterial = null;
+    }
+    
+    // Area annotation functions
+    let areaPoints = [];
+    let areaMaterial = null;
+    let areaGeometry = null;
+    let areaObject = null;
+    
+    function startAreaAnnotation() {
+        if (!globals.currentModel) {
+            showWarningMessage('No model loaded');
+            return;
+        }
+        
+        // Reset area points if this is a new area annotation
+        if (areaPoints.length === 0) {
+            areaPoints = [];
+            
+            // Create material for the area
+            areaMaterial = new THREE.MeshBasicMaterial({
+                color: new THREE.Color(globals.annotationColor),
+                side: THREE.DoubleSide,
+                transparent: true,
+                opacity: 0.5
+            });
+        }
+        
+        // Raycast to find intersection with model
+        const intersects = globals.raycaster.intersectObject(globals.currentModel);
+        
+        if (intersects.length > 0) {
+            const intersection = intersects[0];
+            areaPoints.push(intersection.point.clone());
+            
+            // If we have more than 2 points, create a temporary area visualization
+            if (areaPoints.length > 2) {
+                updateAreaPreview();
+            }
+        }
+    }
+    
+    function updateAreaPreview() {
+        // Remove previous area preview
+        if (areaObject) {
+            globals.scene.remove(areaObject);
+        }
+        
+        // Create geometry for the area
+        areaGeometry = new THREE.BufferGeometry();
+        
+        // Create shape based on accumulated points
+        const shape = new THREE.Shape();
+        shape.moveTo(areaPoints[0].x, areaPoints[0].y);
+        
+        for (let i = 1; i < areaPoints.length; i++) {
+            shape.lineTo(areaPoints[i].x, areaPoints[i].y);
+        }
+        
+        // Close the shape
+        shape.lineTo(areaPoints[0].x, areaPoints[0].y);
+        
+        // Create area object
+        areaObject = new THREE.Mesh(areaGeometry, areaMaterial);
+        globals.scene.add(areaObject);
+    }
+    
+    function finishAreaAnnotation() {
+        // Finish the area if we have at least 3 points
+        if (areaPoints.length >= 3) {
+            // Create final area annotation
+            const geometry = new THREE.BufferGeometry();
+            const vertices = [];
+            
+            // Create triangle fan from the points
+            for (let i = 1; i < areaPoints.length - 1; i++) {
+                vertices.push(areaPoints[0].x, areaPoints[0].y, areaPoints[0].z);
+                vertices.push(areaPoints[i].x, areaPoints[i].y, areaPoints[i].z);
+                vertices.push(areaPoints[i+1].x, areaPoints[i+1].y, areaPoints[i+1].z);
+            }
+            
+            // Set geometry attributes
+            geometry.setAttribute('position', new THREE.Float32BufferAttribute(vertices, 3));
+            geometry.computeVertexNormals();
+            
+            // Create mesh
+            const material = new THREE.MeshBasicMaterial({
+                color: new THREE.Color(globals.annotationColor),
+                side: THREE.DoubleSide,
+                transparent: true,
+                opacity: 0.5
+            });
+            
+            const area = new THREE.Mesh(geometry, material);
+            
+            // Calculate area (approximate)
+            let areaValue = 0;
+            for (let i = 1; i < areaPoints.length - 1; i++) {
+                const a = areaPoints[0].distanceTo(areaPoints[i]);
+                const b = areaPoints[i].distanceTo(areaPoints[i+1]);
+                const c = areaPoints[i+1].distanceTo(areaPoints[0]);
+                const s = (a + b + c) / 2;
+                areaValue += Math.sqrt(s * (s - a) * (s - b) * (s - c)); // Heron's formula
+            }
+            
+            // Create annotation ID
+            const annotationId = 'annotation_' + Date.now();
+            
+            // Add metadata to the annotation
+            area.userData = {
+                type: 'area',
+                id: annotationId,
+                color: globals.annotationColor,
+                points: areaPoints.map(p => ({ x: p.x, y: p.y, z: p.z })),
+                area: areaValue
+            };
+            
+            // Add annotation to scene
+            globals.scene.add(area);
+            globals.annotations.push(area);
+            
+            // Add to undo stack
+            globals.undoStack.push({
+                action: 'add',
+                object: area
+            });
+            
+            // Add to annotations list in UI
+            addAnnotationToList(area);
+            
+            showSuccessMessage(`Area annotation added (Area: ${areaValue.toFixed(2)} square units)`);
+        }
+        
+        // Reset area annotation variables
+        areaPoints = [];
+        areaMaterial = null;
+        areaGeometry = null;
+        
+        if (areaObject) {
+            globals.scene.remove(areaObject);
+            areaObject = null;
+        }
+    }
+    
+    // Measurement functions
+    function startMeasurement() {
+        if (!globals.currentModel) {
+            showWarningMessage('No model loaded');
+            return;
+        }
+        
+        // Raycast to find intersection with model
+        const intersects = globals.raycaster.intersectObject(globals.currentModel);
+        
+        if (intersects.length > 0) {
+            const intersection = intersects[0];
+            const point = intersection.point.clone();
+            
+            // Add point to measurement points array
+            globals.measurePoints.push(point);
+            
+            // Add visual indicator for the measurement point
+            const geometry = new THREE.SphereGeometry(globals.pointSize / 2);
+            const material = new THREE.MeshBasicMaterial({ color: 0xffff00 });
+            const sphere = new THREE.Mesh(geometry, material);
+            sphere.position.copy(point);
+            
+            // Add to scene with measurement metadata
+            sphere.userData = {
+                type: 'measurement_point',
+                index: globals.measurePoints.length - 1
+            };
+            
+            globals.scene.add(sphere);
+            
+            // If this is the second point, create a measurement line
+            if (globals.measurePoints.length > 1) {
+                const start = globals.measurePoints[globals.measurePoints.length - 2];
+                const end = point;
+                
+                // Create line
+                const lineGeometry = new THREE.BufferGeometry().setFromPoints([start, end]);
+                const lineMaterial = new THREE.LineBasicMaterial({ color: 0xffff00 });
+                const line = new THREE.Line(lineGeometry, lineMaterial);
+                
+                // Add metadata
+                line.userData = {
+                    type: 'measurement_line',
+                    startIndex: globals.measurePoints.length - 2,
+                    endIndex: globals.measurePoints.length - 1,
+                    distance: start.distanceTo(end)
+                };
+                
+                globals.scene.add(line);
+                
+                // Update measurement info in UI
+                $('#measure-info').text(`Measurement: ${line.userData.distance.toFixed(2)} units`);
+            }
+        }
+    }
+    
+    function finishMeasurement() {
+        // Do nothing, measurement points are added on each click
+    }
+    
+    // Remove tool functions
+    function removeAnnotation() {
+        if (globals.annotations.length === 0) {
+            showWarningMessage('No annotations to remove');
+            return;
+        }
+        
+        // Raycast to find intersection with all annotations
+        const intersects = [];
+        
+        for (const annotation of globals.annotations) {
+            const results = globals.raycaster.intersectObject(annotation);
+            intersects.push(...results);
+        }
+        
+        if (intersects.length > 0) {
+            // Sort by distance and get the closest
+            intersects.sort((a, b) => a.distance - b.distance);
+            const intersection = intersects[0];
+            const object = intersection.object;
+            
+            // Remove from scene
+            globals.scene.remove(object);
+            
+            // Remove from annotations array
+            const index = globals.annotations.findIndex(a => a.uuid === object.uuid);
+            if (index !== -1) {
+                globals.annotations.splice(index, 1);
+            }
+            
+            // Remove from UI
+            $(`#${object.userData.id}`).remove();
+            
+            // Add to undo stack
+            globals.undoStack.push({
+                action: 'remove',
+                object: object,
+                index: index
+            });
+            
+            showSuccessMessage('Annotation removed');
+        } else {
+            showWarningMessage('No annotations found at this location');
+        }
+    }
+    
+    // Undo function
+    function undoLastOperation() {
+        if (globals.undoStack.length === 0) {
+            showWarningMessage('Nothing to undo');
+            return;
+        }
+        
+        const lastOperation = globals.undoStack.pop();
+        
+        switch (lastOperation.action) {
+            case 'add':
+                // Remove the object that was added
+                globals.scene.remove(lastOperation.object);
+                
+                // Remove from annotations array
+                const index = globals.annotations.findIndex(a => a.uuid === lastOperation.object.uuid);
+                if (index !== -1) {
+                    globals.annotations.splice(index, 1);
+                }
+                
+                // Remove from UI
+                $(`#${lastOperation.object.userData.id}`).remove();
+                
+                showSuccessMessage('Undid addition');
+                break;
+                
+            case 'remove':
+                // Add the object back
+                globals.scene.add(lastOperation.object);
+                
+                // Add back to annotations array
+                globals.annotations.splice(lastOperation.index, 0, lastOperation.object);
+                
+                // Add back to UI
+                addAnnotationToList(lastOperation.object);
+                
+                showSuccessMessage('Undid removal');
+                break;
+        }
+    }
+    
+    // View control functions
+    function resetView() {
+        if (!globals.currentModel) return;
+        
+        // Reset camera and controls
+        fitCameraToModel(globals.currentModel);
+        
+        showSuccessMessage('View reset');
+    }
+    
+    function toggleWireframe() {
+        if (!globals.currentModel) return;
+        
+        globals.wireframeMode = !globals.wireframeMode;
+        
+        if (globals.currentModel.material) {
+            globals.currentModel.material.wireframe = globals.wireframeMode;
+        }
+        
+        showSuccessMessage(`Wireframe mode ${globals.wireframeMode ? 'enabled' : 'disabled'}`);
+    }
+    
+    // Screenshot function
+    function takeScreenshot() {
+        try {
+            // Create a data URL representing the image
+            const dataUrl = globals.renderer.domElement.toDataURL('image/png');
+            
+            // Create a link and trigger download
+            const link = document.createElement('a');
+            link.download = `3d_model_${Date.now()}.png`;
+            link.href = dataUrl;
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            
+            showSuccessMessage('Screenshot saved');
+        } catch (e) {
+            showErrorMessage('Error taking screenshot: ' + e.message);
+        }
+    }
+    
+    // Clear all annotations
+    function clearAnnotations() {
+        // Remove all annotations from scene
+        for (const annotation of globals.annotations) {
+            globals.scene.remove(annotation);
+        }
+        
+        // Clear annotations array
+        globals.annotations = [];
+        
+        // Clear undo stack
+        globals.undoStack = [];
+        
+        // Clear annotations list in UI
+        $('#annotations-list').empty();
+        
+        showSuccessMessage('All annotations cleared');
+    }
+    
+    // Save annotations
+    function saveAnnotations() {
+        if (globals.annotations.length === 0) {
+            showWarningMessage('No annotations to save');
+            return;
+        }
+        
+        try {
+            // Get model ID
+            const activeModel = $('#modelsList li.active');
+            const modelId = activeModel.data('id');
+            
+            if (!modelId) {
+                showWarningMessage('No model selected');
+                return;
+            }
+            
+            // Collect annotation data
+            const annotationsData = globals.annotations.map(annotation => {
+                // Base properties all annotations have
+                const data = {
+                    type: annotation.userData.type,
+                    id: annotation.userData.id,
+                    color: annotation.userData.color
+                };
+                
+                // Add type-specific properties
+                switch (annotation.userData.type) {
+                    case 'point':
+                        data.position = annotation.userData.position;
+                        break;
+                    case 'line':
+                        data.start = annotation.userData.start;
+                        data.end = annotation.userData.end;
+                        data.length = annotation.userData.length;
+                        break;
+                    case 'area':
+                        data.points = annotation.userData.points;
+                        data.area = annotation.userData.area;
+                        break;
+                }
+                
+                return data;
+            });
+            
+            // Create data object to send to server
+            const data = {
+                modelId: modelId,
+                annotations: annotationsData
+            };
+            
+            // Send to server
+            showLoadingOverlay();
+            
+            // NOTE: This is a placeholder for the actual save endpoint
+            // You would need to create a Django endpoint to handle this
+            $.ajax({
+                url: "/webclient/save-3d-annotations",
+                type: "POST",
+                contentType: 'application/json',
+                data: JSON.stringify(data),
+                success: function(response) {
+                    hideLoadingOverlay();
+                    if (response.success) {
+                        showSuccessMessage('Annotations saved successfully');
+                    } else {
+                        showErrorMessage('Error saving annotations: ' + response.message);
+                    }
+                },
+                error: function(xhr, status, error) {
+                    hideLoadingOverlay();
+                    showErrorMessage('Error saving annotations: ' + error);
+                    
+                    // Since the endpoint might not exist yet, show this as a fallback
+                    console.log('Annotations data that would be saved:', data);
+                    showSuccessMessage('Annotations data logged to console (save endpoint not implemented)');
+                }
+            });
+        } catch (e) {
+            hideLoadingOverlay();
+            showErrorMessage('Error preparing annotations: ' + e.message);
+        }
+    }
+    
+    // Helper function to add annotation to the UI list
+    function addAnnotationToList(annotation) {
+        const annotationsList = $('#annotations-list');
+        
+        let label = '';
+        let icon = '';
+        
+        switch (annotation.userData.type) {
+            case 'point':
+                label = 'Point';
+                icon = '<i class="fas fa-map-marker-alt"></i>';
+                break;
+            case 'line':
+                label = `Line (${annotation.userData.length.toFixed(2)} units)`;
+                icon = '<i class="fas fa-ruler"></i>';
+                break;
+            case 'area':
+                label = `Area (${annotation.userData.area.toFixed(2)} sq units)`;
+                icon = '<i class="fas fa-draw-polygon"></i>';
+                break;
+        }
+        
+        const annotationItem = $(`
+            <li id="${annotation.userData.id}" class="annotation-item">
+                <div class="annotation-info">
+                    <span class="annotation-color" style="background-color: ${annotation.userData.color}"></span>
+                    ${icon} <span class="annotation-label">${label}</span>
+                </div>
+                <div class="annotation-actions">
+                    <button class="focus-annotation" title="Focus on this annotation"><i class="fas fa-crosshairs"></i></button>
+                    <button class="hide-annotation" title="Toggle visibility"><i class="fas fa-eye"></i></button>
+                    <button class="remove-annotation" title="Remove this annotation"><i class="fas fa-trash"></i></button>
+                </div>
+            </li>
+        `);
+        
+        // Add click handlers
+        annotationItem.find('.focus-annotation').click(function() {
+            focusOnAnnotation(annotation);
+        });
+        
+        annotationItem.find('.hide-annotation').click(function() {
+            toggleAnnotationVisibility(annotation);
+            $(this).find('i').toggleClass('fa-eye fa-eye-slash');
+        });
+        
+        annotationItem.find('.remove-annotation').click(function() {
+            removeAnnotationById(annotation.userData.id);
+        });
+        
+        // Add to list
+        annotationsList.append(annotationItem);
+    }
+    
+    // Helper function to focus camera on annotation
+    function focusOnAnnotation(annotation) {
+        switch (annotation.userData.type) {
+            case 'point':
+                const pointPos = new THREE.Vector3(
+                    annotation.userData.position.x,
+                    annotation.userData.position.y,
+                    annotation.userData.position.z
+                );
+                globals.controls.target.copy(pointPos);
+                globals.camera.lookAt(pointPos);
+                break;
+                
+            case 'line':
+                const startPos = new THREE.Vector3(
+                    annotation.userData.start.x,
+                    annotation.userData.start.y,
+                    annotation.userData.start.z
+                );
+                const endPos = new THREE.Vector3(
+                    annotation.userData.end.x,
+                    annotation.userData.end.y,
+                    annotation.userData.end.z
+                );
+                const midPoint = new THREE.Vector3().addVectors(startPos, endPos).multiplyScalar(0.5);
+                globals.controls.target.copy(midPoint);
+                globals.camera.lookAt(midPoint);
+                break;
+                
+            case 'area':
+                if (annotation.userData.points && annotation.userData.points.length > 0) {
+                    // Calculate centroid of points
+                    const centroid = new THREE.Vector3();
+                    for (const point of annotation.userData.points) {
+                        centroid.add(new THREE.Vector3(point.x, point.y, point.z));
+                    }
+                    centroid.divideScalar(annotation.userData.points.length);
+                    globals.controls.target.copy(centroid);
+                    globals.camera.lookAt(centroid);
+                }
+                break;
+        }
+        
+        globals.controls.update();
+        showSuccessMessage('Focused on annotation');
+    }
+    
+    // Helper function to remove annotation by ID
+    function removeAnnotationById(id) {
+        const index = globals.annotations.findIndex(a => a.userData.id === id);
+        
+        if (index !== -1) {
+            const annotation = globals.annotations[index];
+            
+            // Remove from scene
+            globals.scene.remove(annotation);
+            
+            // Remove from annotations array
+            globals.annotations.splice(index, 1);
+            
+            // Remove from UI
+            $(`#${id}`).remove();
+            
+            // Add to undo stack
+            globals.undoStack.push({
+                action: 'remove',
+                object: annotation,
+                index: index
+            });
+            
+            showSuccessMessage('Annotation removed');
+        }
+    }
+    
+    // Helper function to toggle annotation visibility
+    function toggleAnnotationVisibility(annotation) {
+        if (annotation.visible === false) {
+            annotation.visible = true;
+            showSuccessMessage('Annotation shown');
+        } else {
+            annotation.visible = false;
+            showSuccessMessage('Annotation hidden');
+        }
+    }
+</script>
+
+{% endblock %} 
