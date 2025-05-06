@@ -1790,7 +1790,8 @@
 							{ x: 0, y: 0 },
 							data.width,
 							data.height,
-							0
+							0,
+							data.existing_labels // Pass the existing labels to displayImage
 						);
 						
 						// Update navigation button states
@@ -1861,7 +1862,7 @@
 		}
 		
 		// Function to display image
-		function displayImage(imageName, imagePath, categories, shapes, colors, coordinates, width, height, rotation) {
+		function displayImage(imageName, imagePath, categories, shapes, colors, coordinates, width, height, rotation, existingLabels) {
 			// Clear the canvas and existing shapes
 			clearCanvas();
 			
@@ -1885,7 +1886,8 @@
 				coordinates: coordinates,
 				width: width,
 				height: height,
-				rotation: rotation
+				rotation: rotation,
+				existingLabels: existingLabels // Store existing labels reference
 			};
 			
 			// Update categories dropdown
@@ -2043,6 +2045,11 @@
 					
 					// Reset all tool states
 					cleanupActivePath();
+					
+					// Load previous labels if available
+					if (currentImage && currentImage.existingLabels && Object.keys(currentImage.existingLabels || {}).length > 0) {
+						loadPreviousLabels(currentImage.existingLabels);
+					}
 					
 					// Automatically detect grid after the image is loaded
 					setTimeout(() => {
@@ -2616,6 +2623,366 @@
 		$('#pdf_button').click(function() {
 			saveToPDF();
 		});
+
+		// Function to load previous labels from existing GeoJSON data
+		function loadPreviousLabels(existingLabels) {
+			if (!existingLabels) {
+				console.log("No existing labels to load");
+				return;
+			}
+			
+			try {
+				showLoadingOverlay("Loading previous labels...");
+				console.log("Loading previous labels:", existingLabels);
+				
+				let loadedShapes = 0;
+				let loadedMeasurements = 0;
+				let errorCount = 0;
+				
+				// Load features (shapes)
+				if (existingLabels.features && existingLabels.features.length > 0) {
+					existingLabels.features.forEach(feature => {
+						try {
+							// Validate feature
+							if (!feature.geometry || !feature.properties) {
+								console.warn("Invalid feature structure:", feature);
+								errorCount++;
+								return;
+							}
+							
+							// Find the corresponding category color
+							let categoryColor = "#ff0000"; // Default color
+							let categoryName = feature.properties.category;
+							
+							if (!categoryName) {
+								console.warn("Feature missing category:", feature);
+								categoryName = "Unknown";
+							}
+							
+							// Find the category color from current categories
+							if (currentImage && currentImage.categories) {
+								const categoryIndex = currentImage.categories.findIndex(cat => cat === categoryName);
+								if (categoryIndex !== -1 && currentImage.colors && currentImage.colors[categoryIndex]) {
+									categoryColor = currentImage.colors[categoryIndex];
+								}
+							}
+							
+							// Use stored color if available
+							if (feature.properties.color) {
+								categoryColor = feature.properties.color;
+							}
+							
+							// Create path based on geometry type
+							let path = null;
+							
+							if (feature.geometry.type === 'Point') {
+								// Point is represented as a circle
+								const coords = feature.geometry.coordinates;
+								if (!coords || coords.length < 2) {
+									console.warn("Invalid Point coordinates:", coords);
+									errorCount++;
+									return;
+								}
+								
+								const centerX = coords[0];
+								const centerY = coords[1];
+								const radius = coords[2] || 5; // Use radius if provided, or default to 5
+								
+								path = new paper.Path.Circle({
+									center: new paper.Point(centerX, centerY),
+									radius: radius,
+									strokeColor: categoryColor,
+									strokeWidth: 2,
+									fillColor: globals.blueprintStyle.shapes.fillColor
+								});
+							}
+							else if (feature.geometry.type === 'Polygon') {
+								// Polygon is a closed path
+								const rings = feature.geometry.coordinates;
+								if (!rings || !rings.length || !rings[0] || rings[0].length < 3) {
+									console.warn("Invalid Polygon coordinates:", rings);
+									errorCount++;
+									return;
+								}
+								
+								const coords = rings[0]; // First (and typically only) ring
+								
+								path = new paper.Path();
+								path.strokeColor = categoryColor;
+								path.strokeWidth = 2;
+								path.fillColor = globals.blueprintStyle.shapes.fillColor;
+								
+								// Add points to path
+								coords.forEach(point => {
+									if (Array.isArray(point) && point.length >= 2) {
+										path.add(new paper.Point(point[0], point[1]));
+									}
+								});
+								
+								// Close the path
+								path.closed = true;
+							}
+							else if (feature.geometry.type === 'LineString') {
+								// LineString is an open path
+								const coords = feature.geometry.coordinates;
+								if (!coords || !coords.length || coords.length < 2) {
+									console.warn("Invalid LineString coordinates:", coords);
+									errorCount++;
+									return;
+								}
+								
+								path = new paper.Path();
+								path.strokeColor = categoryColor;
+								path.strokeWidth = 2;
+								
+								// Add points to path
+								coords.forEach(point => {
+									if (Array.isArray(point) && point.length >= 2) {
+										path.add(new paper.Point(point[0], point[1]));
+									}
+								});
+							}
+							else {
+								console.warn("Unsupported geometry type:", feature.geometry.type);
+								errorCount++;
+								return;
+							}
+							
+							// Set metadata for the path
+							if (path) {
+								path.data = {
+										category: categoryName,
+										color: categoryColor,
+										createdAt: feature.properties.createdAt || new Date().getTime()
+								};
+								
+								// Add to undo stack
+								addToUndoStack(path);
+								loadedShapes++;
+								
+								// Add visual highlight effect for loaded shapes
+								const origStrokeWidth = path.strokeWidth;
+								const origStrokeColor = path.strokeColor;
+								const origFillColor = path.fillColor ? path.fillColor.clone() : null;
+								
+								// Highlight effect
+								path.strokeWidth = origStrokeWidth * 2;
+								path.strokeColor = new paper.Color(1, 0.8, 0);
+								if (path.fillColor) {
+									path.fillColor = new paper.Color(1, 1, 0, 0.5);
+								}
+								
+								// Revert to original style after a delay
+								setTimeout(() => {
+									if (path && !path.removed) {
+										path.strokeWidth = origStrokeWidth;
+										path.strokeColor = origStrokeColor;
+										if (path.fillColor && origFillColor) {
+											path.fillColor = origFillColor;
+										}
+										paper.view.update();
+									}
+								}, 1000);
+							}
+						} catch (e) {
+							console.error("Error creating path from feature:", e, feature);
+							errorCount++;
+						}
+					});
+				}
+				
+				// Load measurements
+				if (existingLabels.measurements && existingLabels.measurements.length > 0) {
+					existingLabels.measurements.forEach(measurement => {
+						try {
+							// Validate measurement
+							if (!measurement.startPoint || !measurement.endPoint) {
+								console.warn("Invalid measurement structure:", measurement);
+								errorCount++;
+								return;
+							}
+							
+							// Create start and end points
+							const startPoint = new paper.Point(measurement.startPoint[0], measurement.startPoint[1]);
+							const endPoint = new paper.Point(measurement.endPoint[0], measurement.endPoint[1]);
+							
+							// Create measurement label
+							const labelText = formatMeasurementText(
+								measurement.pixelDistance,
+								measurement.metricDistance,
+								measurement.imperialDistance
+							);
+							
+							// Create architectural dimension
+							const dimensionGroup = createArchitecturalDimension(startPoint, endPoint, labelText);
+							
+							// Add metadata
+							dimensionGroup.data = {
+								type: 'measurement',
+								pixelDistance: measurement.pixelDistance,
+								metricDistance: measurement.metricDistance,
+								imperialDistance: measurement.imperialDistance,
+								startPoint: startPoint,
+								endPoint: endPoint,
+								createdAt: measurement.createdAt || new Date().getTime()
+							};
+							
+							// Add to undo stack
+							addToUndoStack(dimensionGroup);
+							
+							// Add to saved measurements array
+							globals.savedMeasurements.push(dimensionGroup);
+							loadedMeasurements++;
+							
+							// Add visual highlight effect for loaded measurements
+							const origStrokeColor = dimensionGroup.children[0].strokeColor;
+							
+							// Highlight effect - make all children glow
+							dimensionGroup.children.forEach(child => {
+								if (child.strokeColor) {
+									child.strokeColor = new paper.Color(1, 0.8, 0);
+								}
+								if (child.fillColor) {
+									child.fillColor = new paper.Color(1, 1, 0, 0.5);
+								}
+							});
+							
+							// Revert to original style after a delay
+							setTimeout(() => {
+								if (dimensionGroup && !dimensionGroup.removed) {
+									dimensionGroup.children.forEach(child => {
+										if (child.strokeColor) {
+											child.strokeColor = origStrokeColor;
+										}
+										if (child.fillColor && child instanceof paper.Path.Circle) {
+											child.fillColor = origStrokeColor;
+										}
+									});
+									paper.view.update();
+								}
+							}, 1000);
+						} catch (e) {
+							console.error("Error creating measurement:", e, measurement);
+							errorCount++;
+						}
+					});
+				}
+				
+				// Load grid metrics if available
+				if (existingLabels.metadata && existingLabels.metadata.gridMetrics) {
+					globals.gridMetrics = existingLabels.metadata.gridMetrics;
+					console.log("Loaded grid metrics from previous labels:", globals.gridMetrics);
+					
+					// If grid metrics loaded, add indicator text
+					const gridMetricsText = new paper.PointText({
+						point: new paper.Point(paper.view.center.x, 40),
+						content: "Grid metrics loaded from previous labels",
+						fillColor: 'blue',
+						fontSize: 14,
+						justification: 'center'
+					});
+					
+					// Background for text
+					const bg = new paper.Path.Rectangle({
+						rectangle: gridMetricsText.bounds.expand(5),
+						fillColor: new paper.Color(1, 1, 1, 0.8),
+						strokeColor: new paper.Color(0, 0.5, 1),
+						strokeWidth: 1
+					});
+					bg.sendToBack();
+					
+					// Group and fade out after delay
+					const gridTextGroup = new paper.Group([bg, gridMetricsText]);
+					setTimeout(() => {
+						const fadeInterval = setInterval(() => {
+							if (gridTextGroup.opacity > 0.05) {
+								gridTextGroup.opacity -= 0.05;
+							} else {
+								clearInterval(fadeInterval);
+								gridTextGroup.remove();
+							}
+							paper.view.update();
+						}, 50);
+					}, 3000);
+				}
+				
+				// Update the view
+				paper.view.update();
+				
+				// Build detailed message about loaded items
+				let successMessage = "";
+				
+				const totalLoaded = loadedShapes + loadedMeasurements;
+				if (totalLoaded > 0) {
+					successMessage = `Loaded ${totalLoaded} previous annotations `;
+					
+					const details = [];
+					if (loadedShapes > 0) {
+						details.push(`${loadedShapes} shapes`);
+					}
+					if (loadedMeasurements > 0) {
+						details.push(`${loadedMeasurements} measurements`);
+					}
+					
+					successMessage += `(${details.join(", ")})`;
+					
+					if (errorCount > 0) {
+						successMessage += ` with ${errorCount} errors`;
+					}
+					
+					// Add visual indicator in the canvas
+					const loadedText = new paper.PointText({
+						point: new paper.Point(paper.view.center.x, 80),
+						content: successMessage,
+						fillColor: 'green',
+						fontSize: 14,
+						justification: 'center'
+					});
+					
+					// Background for text
+					const textBg = new paper.Path.Rectangle({
+						rectangle: loadedText.bounds.expand(5),
+						fillColor: new paper.Color(1, 1, 1, 0.8),
+						strokeColor: new paper.Color(0, 0.7, 0),
+						strokeWidth: 1
+					});
+					textBg.sendToBack();
+					
+					// Group and fade out after delay
+					const loadedTextGroup = new paper.Group([textBg, loadedText]);
+					setTimeout(() => {
+						const fadeInterval = setInterval(() => {
+							if (loadedTextGroup.opacity > 0.05) {
+								loadedTextGroup.opacity -= 0.05;
+							} else {
+								clearInterval(fadeInterval);
+								loadedTextGroup.remove();
+							}
+							paper.view.update();
+						}, 50);
+					}, 5000);
+				} else if (errorCount > 0) {
+					successMessage = `No labels loaded. Found ${errorCount} errors in label data.`;
+				} else {
+					successMessage = "No previous labels found for this image.";
+				}
+				
+				hideLoadingOverlay();
+				
+				// Show success message
+				if (totalLoaded > 0) {
+					showSuccessMessage(successMessage);
+				} else if (errorCount > 0) {
+					showWarningMessage(successMessage);
+				} else {
+					// Don't show any message if no labels found
+				}
+			} catch (e) {
+				hideLoadingOverlay();
+				console.error("Error loading previous labels:", e);
+				showErrorMessage("Error loading previous labels: " + e.message);
+			}
+		}
 	});
 
 	// Function to show error, success, or warning messages to user
