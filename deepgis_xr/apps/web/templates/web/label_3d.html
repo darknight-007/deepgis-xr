@@ -30,39 +30,40 @@
         import { STLLoader } from 'three/addons/loaders/STLLoader.js';
         import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 
-        // Set up scene
         const scene = new THREE.Scene();
-        
-        // Add coordinate axes helper
-        const axesHelper = new THREE.AxesHelper(5);
-        scene.add(axesHelper);
-        
-        // Set up camera
         const camera = new THREE.PerspectiveCamera(75, window.innerWidth/window.innerHeight, 0.1, 1000);
         const renderer = new THREE.WebGLRenderer({ canvas: document.getElementById('viewer'), antialias: true });
         renderer.setSize(window.innerWidth, window.innerHeight);
         renderer.setClearColor(0xf0f0f0); // Light gray background
         
-        // Add lights
-        const ambientLight = new THREE.AmbientLight(0x404040, 2); // Soft white light
+        // Enhanced lighting setup
+        // 1. Stronger ambient light for overall illumination
+        const ambientLight = new THREE.AmbientLight(0x606060, 3); // Brighter ambient light with increased intensity
         scene.add(ambientLight);
         
-        const directionalLight = new THREE.DirectionalLight(0xffffff, 1);
-        directionalLight.position.set(1, 1, 1);
-        scene.add(directionalLight);
+        // 2. Main directional light (simulates sun)
+        const mainLight = new THREE.DirectionalLight(0xffffff, 1.5);
+        mainLight.position.set(1, 1, 1);
+        scene.add(mainLight);
+        
+        // 3. Secondary directional light from opposite direction for fill
+        const fillLight = new THREE.DirectionalLight(0xffffff, 0.8);
+        fillLight.position.set(-1, -0.5, -1);
+        scene.add(fillLight);
+        
+        // 4. Bottom light to illuminate the underside
+        const bottomLight = new THREE.DirectionalLight(0xffffff, 0.7);
+        bottomLight.position.set(0, -1, 0);
+        scene.add(bottomLight);
+        
+        // 5. Hemisphere light for more natural environmental lighting
+        const hemiLight = new THREE.HemisphereLight(0xffffff, 0xffffff, 0.6);
+        scene.add(hemiLight);
         
         // Add orbit controls
         const controls = new OrbitControls(camera, renderer.domElement);
         controls.enableDamping = true;
         controls.dampingFactor = 0.25;
-        
-        // Set default view: +X to the right, +Y away from screen, +Z up (side view)
-        // Position the camera on the X axis, looking toward the origin
-        camera.position.set(10, 0, 0);
-        camera.lookAt(0, 0, 0);
-        
-        // Setup controls defaults
-        controls.target.set(0, 0, 0);
         
         // Handle window resize
         window.addEventListener('resize', function() {
@@ -74,12 +75,7 @@
         // Load STL model
         const loader = new STLLoader();
         loader.load("{% static 'models/stl/navagunjara-reborn-gometric-analysis.stl' %}", function (geometry) {
-            const material = new THREE.MeshPhongMaterial({ 
-                color: 0x7c7c7c, 
-                specular: 0x111111, 
-                shininess: 200,
-                side: THREE.DoubleSide // Render both sides of faces
-            });
+            const material = new THREE.MeshPhongMaterial({ color: 0x7c7c7c, specular: 0x111111, shininess: 200 });
             const mesh = new THREE.Mesh(geometry, material);
             
             // Center the model
@@ -98,8 +94,21 @@
                 boundingBox.max.z - boundingBox.min.z
             );
             
-            // Update camera position for side view with model in frame
-            camera.position.set(maxDim * 2, 0, 0);
+            // Calculate a safe distance for the camera
+            const distance = maxDim * 2;
+            
+            // Position the camera 90° counter-clockwise around the X-axis
+            // This places the camera below the model looking up
+            camera.position.set(0, -distance, 0); // Position camera along negative Y axis
+            
+            // Reset the camera's up vector to maintain correct orientation
+            camera.up.set(0, 0, 1); // Set the up direction to be the Z axis
+            
+            // Look at the center of the model
+            camera.lookAt(0, 0, 0);
+            
+            // Update orbit controls to maintain this orientation
+            controls.target.set(0, 0, 0);
             controls.update();
             
             animate();
