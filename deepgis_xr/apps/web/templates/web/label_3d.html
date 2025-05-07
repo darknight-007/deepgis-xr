@@ -8,10 +8,57 @@
     <style>
         body { margin: 0; overflow: hidden; }
         canvas { display: block; }
+        
+        /* View control panel */
+        #viewControls {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            background-color: rgba(255, 255, 255, 0.7);
+            padding: 10px;
+            border-radius: 5px;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            z-index: 100;
+        }
+        
+        button {
+            padding: 8px 15px;
+            border: none;
+            background-color: #4285f4;
+            color: white;
+            border-radius: 4px;
+            cursor: pointer;
+            font-weight: bold;
+            transition: background-color 0.3s;
+        }
+        
+        button:hover {
+            background-color: #3367d6;
+        }
+        
+        /* Axes labels */
+        .axis-label {
+            position: absolute;
+            color: #000;
+            font-size: 14px;
+            font-weight: bold;
+            pointer-events: none;
+        }
     </style>
 </head>
 <body>
     <canvas id="viewer"></canvas>
+    
+    <!-- View Controls -->
+    <div id="viewControls">
+        <button id="isometricView">Isometric View</button>
+        <button id="frontView">Front View</button>
+        <button id="sideView">Side View</button>
+        <button id="topView">Top View</button>
+        <button id="toggleAxes">Toggle Axes</button>
+    </div>
 
     <!-- Import maps polyfill for browsers without native support -->
     <script async src="https://unpkg.com/es-module-shims@1.8.0/dist/es-module-shims.js"></script>
@@ -49,9 +96,68 @@
         controls.enableDamping = true;
         controls.dampingFactor = 0.25;
         
-        // Initial camera position - side view instead of top
-        camera.position.set(5, 0, 0); // Position on the X axis for side view
+        // Add axes helper
+        const axesHelper = new THREE.AxesHelper(5);
+        scene.add(axesHelper);
+        let axesVisible = true;
+        
+        // Initial camera position - isometric view
+        const distance = 5;
+        const isometricFactor = Math.sqrt(1/3); // For equal projection along all axes
+        camera.position.set(
+            distance * isometricFactor, 
+            distance * isometricFactor, 
+            distance * isometricFactor
+        );
         camera.lookAt(0, 0, 0);
+        
+        // Define view control functions
+        let maxDim = 10; // Default value, will be updated after model loads
+        
+        function setIsometricView() {
+            const cameraDistance = maxDim * 2;
+            camera.position.set(
+                cameraDistance * isometricFactor,
+                cameraDistance * isometricFactor,
+                cameraDistance * isometricFactor
+            );
+            camera.lookAt(scene.position);
+            controls.target.copy(scene.position);
+            controls.update();
+        }
+        
+        function setFrontView() {
+            camera.position.set(0, 0, maxDim * 2);
+            camera.lookAt(scene.position);
+            controls.target.copy(scene.position);
+            controls.update();
+        }
+        
+        function setSideView() {
+            camera.position.set(maxDim * 2, 0, 0);
+            camera.lookAt(scene.position);
+            controls.target.copy(scene.position);
+            controls.update();
+        }
+        
+        function setTopView() {
+            camera.position.set(0, maxDim * 2, 0);
+            camera.lookAt(scene.position);
+            controls.target.copy(scene.position);
+            controls.update();
+        }
+        
+        function toggleAxes() {
+            axesVisible = !axesVisible;
+            axesHelper.visible = axesVisible;
+        }
+        
+        // Add event listeners to buttons
+        document.getElementById('isometricView').addEventListener('click', setIsometricView);
+        document.getElementById('frontView').addEventListener('click', setFrontView);
+        document.getElementById('sideView').addEventListener('click', setSideView);
+        document.getElementById('topView').addEventListener('click', setTopView);
+        document.getElementById('toggleAxes').addEventListener('click', toggleAxes);
         
         // Handle window resize
         window.addEventListener('resize', function() {
@@ -75,20 +181,18 @@
             
             scene.add(mesh);
             
-            // Adjust camera to fit the model with side view
-            const maxDim = Math.max(
+            // Adjust camera to fit the model with isometric view
+            maxDim = Math.max(
                 boundingBox.max.x - boundingBox.min.x,
                 boundingBox.max.y - boundingBox.min.y,
                 boundingBox.max.z - boundingBox.min.z
             );
             
-            // Position for side view (along X axis)
-            camera.position.set(maxDim * 2, 0, 0);
-            camera.lookAt(scene.position);
+            // Scale axes helper to match model size
+            axesHelper.scale.set(maxDim/5, maxDim/5, maxDim/5);
             
-            // Update controls target to center of model
-            controls.target.copy(scene.position);
-            controls.update();
+            // Position for isometric view
+            setIsometricView();
             
             animate();
         }, undefined, function (error) {
