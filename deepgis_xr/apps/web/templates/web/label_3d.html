@@ -8,10 +8,20 @@
     <style>
         body { margin: 0; overflow: hidden; }
         canvas { display: block; }
+        #loading {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            font-family: Arial, sans-serif;
+            font-size: 18px;
+            color: #333;
+        }
     </style>
 </head>
 <body>
     <canvas id="viewer"></canvas>
+    <div id="loading">Loading 3D model...</div>
 
     <!-- Import maps polyfill for browsers without native support -->
     <script async src="https://unpkg.com/es-module-shims@1.8.0/dist/es-module-shims.js"></script>
@@ -30,11 +40,17 @@
         import { STLLoader } from 'three/addons/loaders/STLLoader.js';
         import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 
+        // Scene setup
         const scene = new THREE.Scene();
         const camera = new THREE.PerspectiveCamera(75, window.innerWidth/window.innerHeight, 0.1, 1000);
-        const renderer = new THREE.WebGLRenderer({ canvas: document.getElementById('viewer'), antialias: true });
+        const renderer = new THREE.WebGLRenderer({ 
+            canvas: document.getElementById('viewer'), 
+            antialias: true,
+            alpha: true 
+        });
         renderer.setSize(window.innerWidth, window.innerHeight);
         renderer.setClearColor(0xf0f0f0); // Light gray background
+        renderer.setPixelRatio(window.devicePixelRatio); // For better display on high DPI screens
         
         // Enhanced lighting setup
         // 1. Stronger ambient light for overall illumination
@@ -46,24 +62,28 @@
         mainLight.position.set(1, 1, 1);
         scene.add(mainLight);
         
-        // 3. Secondary directional light from opposite direction for fill
-        const fillLight = new THREE.DirectionalLight(0xffffff, 0.8);
-        fillLight.position.set(-1, -0.5, -1);
-        scene.add(fillLight);
+        // 3. Secondary light from another angle to reduce shadows
+        const secondaryLight = new THREE.DirectionalLight(0xffffff, 1.0);
+        secondaryLight.position.set(-1, -1, -1);
+        scene.add(secondaryLight);
         
-        // 4. Bottom light to illuminate the underside
-        const bottomLight = new THREE.DirectionalLight(0xffffff, 0.7);
-        bottomLight.position.set(0, -1, 0);
-        scene.add(bottomLight);
+        // Initial camera position
+        camera.position.set(0, -5, 0);
         
-        // 5. Hemisphere light for more natural environmental lighting
-        const hemiLight = new THREE.HemisphereLight(0xffffff, 0xffffff, 0.6);
-        scene.add(hemiLight);
-        
-        // Add orbit controls
+        // Add orbit controls with improved configuration
         const controls = new OrbitControls(camera, renderer.domElement);
         controls.enableDamping = true;
         controls.dampingFactor = 0.25;
+        controls.screenSpacePanning = true; // Allows panning relative to the screen rather than the world plane
+        controls.minDistance = 0.5; // Minimum zoom distance
+        controls.maxDistance = 100; // Maximum zoom distance
+        controls.rotateSpeed = 0.7; // Adjust rotation speed (lower for more precision)
+        controls.zoomSpeed = 1.0; // Adjust zoom speed
+        controls.panSpeed = 0.7; // Adjust pan speed
+        controls.update();
+        
+        // Start animation loop immediately to ensure controls responsiveness
+        animate();
         
         // Handle window resize
         window.addEventListener('resize', function() {
@@ -75,7 +95,14 @@
         // Load STL model
         const loader = new STLLoader();
         loader.load("{% static 'models/stl/navagunjara-reborn-gometric-analysis.stl' %}", function (geometry) {
-            const material = new THREE.MeshPhongMaterial({ color: 0x7c7c7c, specular: 0x111111, shininess: 200 });
+            // Hide loading indicator
+            document.getElementById('loading').style.display = 'none';
+            
+            const material = new THREE.MeshPhongMaterial({ 
+                color: 0x7c7c7c, 
+                specular: 0x111111, 
+                shininess: 200 
+            });
             const mesh = new THREE.Mesh(geometry, material);
             
             // Center the model
@@ -97,9 +124,9 @@
             // Calculate a safe distance for the camera
             const distance = maxDim * 2;
             
-            // Position the camera 90° counter-clockwise around the X-axis
-            // This places the camera below the model looking up
-            camera.position.set(0, -distance, 0); // Position camera along negative Y axis
+            // Position the camera more traditionally at an angle
+            // This provides a more natural starting view
+            camera.position.set(distance, -distance * 0.7, distance * 0.5);
             
             // Reset the camera's up vector to maintain correct orientation
             camera.up.set(0, 0, 1); // Set the up direction to be the Z axis
@@ -107,12 +134,21 @@
             // Look at the center of the model
             camera.lookAt(0, 0, 0);
             
-            // Update orbit controls to maintain this orientation
+            // Update orbit controls
             controls.target.set(0, 0, 0);
             controls.update();
             
-            animate();
-        }, undefined, function (error) {
+        }, 
+        // Add progress callback
+        function(xhr) {
+            if (xhr.lengthComputable) {
+                const percent = Math.round((xhr.loaded / xhr.total) * 100);
+                document.getElementById('loading').textContent = `Loading 3D model: ${percent}%`;
+            }
+        }, 
+        // Error callback
+        function (error) {
+            document.getElementById('loading').textContent = 'Error loading model';
             console.error('An error occurred loading the STL file:', error);
         });
 
