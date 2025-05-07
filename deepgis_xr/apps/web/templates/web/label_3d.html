@@ -16,12 +16,96 @@
             font-family: Arial, sans-serif;
             font-size: 18px;
             color: #333;
+            background: rgba(255, 255, 255, 0.9);
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        .controls-overlay {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            background: rgba(255, 255, 255, 0.9);
+            padding: 15px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            font-family: Arial, sans-serif;
+        }
+        .controls-overlay button {
+            display: block;
+            margin: 5px 0;
+            padding: 8px 15px;
+            background: #4CAF50;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            transition: background 0.3s;
+        }
+        .controls-overlay button:hover {
+            background: #45a049;
+        }
+        .model-info {
+            margin-top: 15px;
+            padding-top: 15px;
+            border-top: 1px solid #ddd;
+        }
+        .model-info h3 {
+            margin: 0 0 10px 0;
+            font-size: 16px;
+        }
+        .model-info p {
+            margin: 5px 0;
+            font-size: 14px;
+        }
+        .keyboard-shortcuts {
+            position: absolute;
+            bottom: 20px;
+            left: 20px;
+            background: rgba(255, 255, 255, 0.9);
+            padding: 15px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            font-family: Arial, sans-serif;
+            font-size: 14px;
+        }
+        .keyboard-shortcuts h3 {
+            margin: 0 0 10px 0;
+        }
+        .keyboard-shortcuts ul {
+            margin: 0;
+            padding-left: 20px;
         }
     </style>
 </head>
 <body>
     <canvas id="viewer"></canvas>
     <div id="loading">Loading 3D model...</div>
+    
+    <div class="controls-overlay">
+        <button id="resetView">Reset View</button>
+        <button id="toggleWireframe">Toggle Wireframe</button>
+        <button id="toggleGrid">Toggle Grid</button>
+        <button id="toggleAxes">Toggle Axes</button>
+        <div class="model-info">
+            <h3>Model Information</h3>
+            <p id="modelName">Loading...</p>
+            <p id="modelDimensions">Loading...</p>
+        </div>
+    </div>
+
+    <div class="keyboard-shortcuts">
+        <h3>Keyboard Shortcuts</h3>
+        <ul>
+            <li>R - Reset View</li>
+            <li>W - Toggle Wireframe</li>
+            <li>G - Toggle Grid</li>
+            <li>A - Toggle Axes</li>
+            <li>Space - Toggle Auto Rotation</li>
+            <li>+ - Increase Rotation Speed</li>
+            <li>- - Decrease Rotation Speed</li>
+        </ul>
+    </div>
 
     <!-- Import maps polyfill for browsers without native support -->
     <script async src="https://unpkg.com/es-module-shims@1.8.0/dist/es-module-shims.js"></script>
@@ -49,20 +133,17 @@
             alpha: true 
         });
         renderer.setSize(window.innerWidth, window.innerHeight);
-        renderer.setClearColor(0xf0f0f0); // Light gray background
-        renderer.setPixelRatio(window.devicePixelRatio); // For better display on high DPI screens
+        renderer.setClearColor(0xf0f0f0);
+        renderer.setPixelRatio(window.devicePixelRatio);
         
         // Enhanced lighting setup
-        // 1. Stronger ambient light for overall illumination
-        const ambientLight = new THREE.AmbientLight(0x606060, 3); // Brighter ambient light with increased intensity
+        const ambientLight = new THREE.AmbientLight(0x606060, 3);
         scene.add(ambientLight);
         
-        // 2. Main directional light (simulates sun)
         const mainLight = new THREE.DirectionalLight(0xffffff, 1.5);
         mainLight.position.set(1, 1, 1);
         scene.add(mainLight);
         
-        // 3. Secondary light from another angle to reduce shadows
         const secondaryLight = new THREE.DirectionalLight(0xffffff, 1.0);
         secondaryLight.position.set(-1, -1, -1);
         scene.add(secondaryLight);
@@ -74,89 +155,285 @@
         const controls = new OrbitControls(camera, renderer.domElement);
         controls.enableDamping = true;
         controls.dampingFactor = 0.25;
-        controls.screenSpacePanning = true; // Allows panning relative to the screen rather than the world plane
-        controls.minDistance = 0.5; // Minimum zoom distance
-        controls.maxDistance = 100; // Maximum zoom distance
-        controls.rotateSpeed = 0.7; // Adjust rotation speed (lower for more precision)
-        controls.zoomSpeed = 1.0; // Adjust zoom speed
-        controls.panSpeed = 0.7; // Adjust pan speed
+        controls.screenSpacePanning = true;
+        controls.minDistance = 0.5;
+        controls.maxDistance = 100;
+        controls.rotateSpeed = 0.7;
+        controls.zoomSpeed = 1.0;
+        controls.panSpeed = 0.7;
+        controls.enableTouch = true;
+        controls.touches = {
+            ONE: THREE.TOUCH.ROTATE,
+            TWO: THREE.TOUCH.DOLLY_PAN
+        };
+        
+        // Enhanced orbit controls configuration
+        controls.enableZoom = true;
+        controls.autoRotate = false;
+        controls.autoRotateSpeed = 2.0;
+        controls.enableKeys = true;
+        controls.keys = {
+            LEFT: 'ArrowLeft',
+            UP: 'ArrowUp',
+            RIGHT: 'ArrowRight',
+            BOTTOM: 'ArrowDown'
+        };
+        controls.mouseButtons = {
+            LEFT: THREE.MOUSE.ROTATE,
+            MIDDLE: THREE.MOUSE.DOLLY,
+            RIGHT: THREE.MOUSE.PAN
+        };
+        controls.maxPolarAngle = Math.PI; // Allow full vertical rotation
+        controls.minPolarAngle = 0;
+        controls.maxAzimuthAngle = Infinity; // Allow full horizontal rotation
+        controls.minAzimuthAngle = -Infinity;
         controls.update();
+
+        // Add transformation controls
+        let isAutoRotating = false;
+        let currentRotationSpeed = 0;
+        const rotationSpeeds = [0, 0.5, 1, 2, 4]; // Different rotation speeds
+        let currentRotationSpeedIndex = 0;
+
+        // Add auto-rotation control to UI
+        const autoRotateButton = document.createElement('button');
+        autoRotateButton.id = 'toggleAutoRotate';
+        autoRotateButton.textContent = 'Auto Rotate';
+        document.querySelector('.controls-overlay').insertBefore(
+            autoRotateButton,
+            document.querySelector('.model-info')
+        );
+
+        const rotationSpeedButton = document.createElement('button');
+        rotationSpeedButton.id = 'changeRotationSpeed';
+        rotationSpeedButton.textContent = 'Rotation Speed: Normal';
+        document.querySelector('.controls-overlay').insertBefore(
+            rotationSpeedButton,
+            document.querySelector('.model-info')
+        );
+
+        // Add visual helpers
+        const gridHelper = new THREE.GridHelper(10, 10);
+        gridHelper.rotation.x = Math.PI / 2; // Make grid the ground plane (XY, Z up)
+        scene.add(gridHelper);
         
-        // Start animation loop immediately to ensure controls responsiveness
-        animate();
-        
-        // Handle window resize
-        window.addEventListener('resize', function() {
-            camera.aspect = window.innerWidth / window.innerHeight;
-            camera.updateProjectionMatrix();
-            renderer.setSize(window.innerWidth, window.innerHeight);
+        const axesHelper = new THREE.AxesHelper(5);
+        scene.add(axesHelper);
+
+        // UI Controls
+        let currentMesh = null;
+        let isWireframe = false;
+        let isGridVisible = true;
+        let isAxesVisible = true;
+
+        document.getElementById('resetView').addEventListener('click', resetCamera);
+        document.getElementById('toggleWireframe').addEventListener('click', toggleWireframe);
+        document.getElementById('toggleGrid').addEventListener('click', toggleGrid);
+        document.getElementById('toggleAxes').addEventListener('click', toggleAxes);
+        autoRotateButton.addEventListener('click', toggleAutoRotate);
+        rotationSpeedButton.addEventListener('click', changeRotationSpeed);
+
+        // Enhanced keyboard controls
+        document.addEventListener('keydown', (event) => {
+            switch(event.key.toLowerCase()) {
+                case 'r':
+                    resetCamera();
+                    break;
+                case 'w':
+                    toggleWireframe();
+                    break;
+                case 'g':
+                    toggleGrid();
+                    break;
+                case 'a':
+                    toggleAxes();
+                    break;
+                case ' ':
+                    toggleAutoRotate();
+                    break;
+                case '+':
+                    increaseRotationSpeed();
+                    break;
+                case '-':
+                    decreaseRotationSpeed();
+                    break;
+            }
         });
+
+        function resetCamera() {
+            if (currentMesh) {
+                const boundingBox = currentMesh.geometry.boundingBox;
+                const maxDim = Math.max(
+                    boundingBox.max.x - boundingBox.min.x,
+                    boundingBox.max.y - boundingBox.min.y,
+                    boundingBox.max.z - boundingBox.min.z
+                );
+                const distance = maxDim * 0.8;
+                
+                // Reset camera position with smooth transition
+                const targetPosition = new THREE.Vector3(distance, -distance * 0.7, distance * 0.5);
+                const targetLookAt = new THREE.Vector3(0, 0, 0);
+                
+                // Animate camera movement
+                const duration = 1000; // 1 second
+                const startTime = Date.now();
+                const startPosition = camera.position.clone();
+                const startLookAt = controls.target.clone();
+                
+                function animateCamera() {
+                    const elapsed = Date.now() - startTime;
+                    const progress = Math.min(elapsed / duration, 1);
+                    
+                    // Ease in-out function
+                    const easeProgress = progress < 0.5
+                        ? 2 * progress * progress
+                        : 1 - Math.pow(-2 * progress + 2, 2) / 2;
+                    
+                    camera.position.lerpVectors(startPosition, targetPosition, easeProgress);
+                    controls.target.lerpVectors(startLookAt, targetLookAt, easeProgress);
+                    
+                    if (progress < 1) {
+                        requestAnimationFrame(animateCamera);
+                    }
+                    
+                    camera.up.set(0, 0, 1);
+                    controls.update();
+                }
+                
+                animateCamera();
+            }
+        }
+
+        function toggleWireframe() {
+            if (currentMesh) {
+                isWireframe = !isWireframe;
+                currentMesh.material.wireframe = isWireframe;
+            }
+        }
+
+        function toggleGrid() {
+            isGridVisible = !isGridVisible;
+            gridHelper.visible = isGridVisible;
+        }
+
+        function toggleAxes() {
+            isAxesVisible = !isAxesVisible;
+            axesHelper.visible = isAxesVisible;
+        }
+
+        function toggleAutoRotate() {
+            isAutoRotating = !isAutoRotating;
+            controls.autoRotate = isAutoRotating;
+            autoRotateButton.textContent = isAutoRotate ? 'Stop Rotation' : 'Auto Rotate';
+            autoRotateButton.style.background = isAutoRotate ? '#ff4444' : '#4CAF50';
+        }
+
+        function changeRotationSpeed() {
+            currentRotationSpeedIndex = (currentRotationSpeedIndex + 1) % rotationSpeeds.length;
+            currentRotationSpeed = rotationSpeeds[currentRotationSpeedIndex];
+            controls.autoRotateSpeed = currentRotationSpeed;
+            
+            const speedLabels = ['Off', 'Slow', 'Normal', 'Fast', 'Very Fast'];
+            rotationSpeedButton.textContent = `Rotation Speed: ${speedLabels[currentRotationSpeedIndex]}`;
+        }
+
+        function increaseRotationSpeed() {
+            if (currentRotationSpeedIndex < rotationSpeeds.length - 1) {
+                currentRotationSpeedIndex++;
+                changeRotationSpeed();
+            }
+        }
+
+        function decreaseRotationSpeed() {
+            if (currentRotationSpeedIndex > 0) {
+                currentRotationSpeedIndex--;
+                changeRotationSpeed();
+            }
+        }
+
+        // Loading timeout
+        const loadingTimeout = setTimeout(() => {
+            if (document.getElementById('loading').style.display !== 'none') {
+                document.getElementById('loading').textContent = 'Loading is taking longer than expected. Please try refreshing the page.';
+            }
+        }, 30000);
 
         // Load STL model
         const loader = new STLLoader();
         loader.load("{% static 'models/stl/navagunjara-reborn-gometric-analysis.stl' %}", function (geometry) {
-            // Hide loading indicator
+            clearTimeout(loadingTimeout);
             document.getElementById('loading').style.display = 'none';
             
             const material = new THREE.MeshPhongMaterial({ 
                 color: 0x7c7c7c, 
                 specular: 0x111111, 
-                shininess: 200 
+                shininess: 200,
+                wireframe: true // Default to wireframe mode
             });
             const mesh = new THREE.Mesh(geometry, material);
+            currentMesh = mesh;
             
             // Center the model
             geometry.computeBoundingBox();
             const boundingBox = geometry.boundingBox;
             const center = new THREE.Vector3();
             boundingBox.getCenter(center);
-            mesh.position.set(-center.x, -center.y, -center.z);
+            // Calculate Z offset so the lowest point is at Z=0
+            const zOffset = -boundingBox.min.z;
+            // Center the model in X and Y, and lift in Z
+            mesh.position.set(-center.x, -center.y, -center.z + zOffset);
             
             scene.add(mesh);
             
-            // Adjust camera to fit the model
-            const maxDim = Math.max(
-                boundingBox.max.x - boundingBox.min.x,
-                boundingBox.max.y - boundingBox.min.y,
-                boundingBox.max.z - boundingBox.min.z
-            );
+            // Update model information
+            const dimensions = {
+                x: (boundingBox.max.x - boundingBox.min.x).toFixed(2),
+                y: (boundingBox.max.y - boundingBox.min.y).toFixed(2),
+                z: (boundingBox.max.z - boundingBox.min.z).toFixed(2)
+            };
             
-            // Calculate a safe distance for the camera
-            const distance = maxDim * 2;
+            document.getElementById('modelName').textContent = 'Navagunjara Reborn';
+            document.getElementById('modelDimensions').textContent = 
+                `Dimensions: ${dimensions.x} x ${dimensions.y} x ${dimensions.z} units`;
             
-            // Position the camera more traditionally at an angle
-            // This provides a more natural starting view
-            camera.position.set(distance, -distance * 0.7, distance * 0.5);
-            
-            // Reset the camera's up vector to maintain correct orientation
-            camera.up.set(0, 0, 1); // Set the up direction to be the Z axis
-            
-            // Look at the center of the model
+            // Adjust camera to fit the model (centered and fully visible)
+            const size = boundingBox.getSize(new THREE.Vector3());
+            const maxDim = Math.max(size.x, size.y, size.z);
+            const distance = maxDim * 1.5; // Add margin
+            // Camera position: above and to the side, looking at origin
+            camera.position.set(distance, -distance, distance * 0.7);
+            camera.up.set(0, 0, 1);
             camera.lookAt(0, 0, 0);
-            
-            // Update orbit controls
             controls.target.set(0, 0, 0);
             controls.update();
             
         }, 
-        // Add progress callback
         function(xhr) {
             if (xhr.lengthComputable) {
                 const percent = Math.round((xhr.loaded / xhr.total) * 100);
                 document.getElementById('loading').textContent = `Loading 3D model: ${percent}%`;
             }
         }, 
-        // Error callback
         function (error) {
-            document.getElementById('loading').textContent = 'Error loading model';
+            clearTimeout(loadingTimeout);
+            document.getElementById('loading').textContent = 'Error loading model. Please try refreshing the page.';
             console.error('An error occurred loading the STL file:', error);
         });
 
         function animate() {
             requestAnimationFrame(animate);
-            controls.update(); // Required for damping
+            controls.update();
             renderer.render(scene, camera);
         }
+
+        animate();
+
+        // Handle window resize
+        window.addEventListener('resize', function() {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
     </script>
 </body>
 </html>

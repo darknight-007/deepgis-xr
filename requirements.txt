@@ -17,6 +17,7 @@ twilio>=8.10.0
 django-phonenumber-field>=7.3.0
 phonenumbers>=8.13.27
 opencv-python>=4.5.0
+numpy-stl>=2.17.1  # Required for 3D STL model generation and processing
 
 # GIS dependencies
 fiona==1.9.1
