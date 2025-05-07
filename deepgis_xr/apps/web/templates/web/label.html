@@ -300,6 +300,59 @@
 		from { opacity: 1; }
 		to { opacity: 0; }
 	}
+	
+	/* Debug console styles */
+	#debug-console {
+		width: 100%;
+		height: 150px;
+		background-color: #1e1e1e;
+		color: #39ff14; /* Bright green */
+		font-family: 'Consolas', 'Monaco', monospace;
+		font-size: 12px;
+		padding: 8px;
+		border-top: 1px solid #444;
+		overflow-y: auto;
+		display: none;
+	}
+	
+	#debug-console.expanded {
+		display: block;
+	}
+	
+	#debug-console .log {
+		margin: 2px 0;
+		line-height: 1.2;
+	}
+	
+	#debug-console .error {
+		color: #ff4136;
+	}
+	
+	#debug-console .warning {
+		color: #ffdc00;
+	}
+	
+	#debug-console .success {
+		color: #39ff14;
+	}
+	
+	#debug-console .info {
+		color: #7fdbff;
+	}
+	
+	#console-toggle {
+		position: fixed;
+		bottom: 25px;
+		right: 20px;
+		background-color: #444;
+		color: white;
+		border: none;
+		border-radius: 4px;
+		padding: 5px 10px;
+		font-size: 12px;
+		cursor: pointer;
+		z-index: 1000;
+	}
 </style>
 
 <div class="wrapper">
@@ -382,6 +435,10 @@
 			<span id="measure-distance">Distance: </span>
 		</div>
 	</div>
+	
+	<!-- Debug Console -->
+	<div id="debug-console"></div>
+	<button id="console-toggle">Show Debug Console</button>
 </div>
 
 <!-- Add full image URL display at the bottom -->
@@ -2419,6 +2476,7 @@
 		function startGridDetection(point) {
 			// Show loading overlay
 				showLoadingOverlay("Detecting grid...");
+				logToDebugConsole("Starting grid detection...", "info");
 				
 				// Get current image data
 				const imageData = {
@@ -2431,6 +2489,7 @@
 				};
 				
 				console.log('Starting grid detection at point:', point);
+				logToDebugConsole(`Starting grid detection at point: (${point.x}, ${point.y})`, "info");
 				
 				// We no longer need the click indicator since it's automatic
 				// Just call the backend directly
@@ -2447,15 +2506,25 @@
 						if (response.success) {
 							// Render the detected grid
 							renderDetectedGrid(response.grid);
-							// Add the success message back that was removed
-							showSuccessMessage(`Grid detected automatically (Confidence: ${Math.round(response.grid.metrics.confidence * 100)}%)`);
+							// Log success to debug console
+							const confidencePercent = Math.round(response.grid.metrics.confidence * 100);
+							logToDebugConsole(`Grid detected automatically (Confidence: ${confidencePercent}%)`, "success");
 							
 							// Log detailed metrics for debugging
 							console.log('Grid detection metrics:', response.grid.metrics);
+							
+							// Log additional details to debug console
+							logToDebugConsole(`Cell Width: ${Math.round(response.grid.metrics.cellWidth)}px`, "info");
+							logToDebugConsole(`Cell Height: ${Math.round(response.grid.metrics.cellHeight)}px`, "info");
+							logToDebugConsole(`Rotation: ${response.grid.metrics.rotation.toFixed(1)}°`, "info");
+							if (response.grid.metrics.realWorldScale) {
+								const scale = (response.grid.metrics.realWorldScale.width / response.grid.metrics.cellWidth).toFixed(5);
+								logToDebugConsole(`Scale: 1px = ${scale}m`, "info");
+							}
 						} else {
 							// Show proper error message to user
 							let errorMsg = response.message || "Automatic grid detection failed";
-							showErrorMessage(errorMsg);
+							logToDebugConsole(errorMsg, "error");
 						}
 					},
 					error: function(xhr, status, error) {
@@ -2472,7 +2541,7 @@
 							errorMessage = `Grid detection error: ${error || xhr.statusText}`;
 						}
 						
-						showErrorMessage(errorMessage);
+						logToDebugConsole(errorMessage, "error");
 						console.error("Grid detection error details:", xhr.responseText);
 					}
 				});
@@ -2496,6 +2565,8 @@
 				// Create separate groups for horizontal and vertical lines
 				const hLinesGroup = new paper.Group();
 				const vLinesGroup = new paper.Group();
+				
+				logToDebugConsole(`Rendering ${gridData.lines.length} grid lines`, "info");
 				
 				gridData.lines.forEach(line => {
 					const start = new paper.Point(line.start.x, line.start.y);
@@ -2527,6 +2598,8 @@
 			if (gridData.intersections) {
 				const intersectionsGroup = new paper.Group();
 				
+				logToDebugConsole(`Rendering ${gridData.intersections.length} grid intersections`, "info");
+				
 				gridData.intersections.forEach(point => {
 					const intersection = new paper.Path.Circle({
 						center: new paper.Point(point.x, point.y),
@@ -2545,6 +2618,7 @@
 			if (gridData.metrics && gridData.metrics.realWorldScale) {
 				globals.gridMetrics = gridData.metrics;
 				console.log('Grid metrics stored for measurements:', globals.gridMetrics);
+				logToDebugConsole("Grid metrics stored for measurements", "success");
 			}
 			
 			// Add the entire grid group to undo stack
@@ -2553,69 +2627,23 @@
 			// Update canvas
 			paper.view.update();
 			
-			// Display grid metrics
+			// Display grid metrics in debug console
 			if (gridData.metrics) {
-				// Format metrics message
-				let metricsText = "Grid Metrics:\n";
-				metricsText += `Cell Width: ${Math.round(gridData.metrics.cellWidth)}px\n`;
-				metricsText += `Cell Height: ${Math.round(gridData.metrics.cellHeight)}px\n`;
-				metricsText += `Rotation: ${gridData.metrics.rotation.toFixed(1)}°\n`;
-				metricsText += `Confidence: ${(gridData.metrics.confidence * 100).toFixed(0)}%`;
+				// Format metrics message for debug console
+				logToDebugConsole("Grid Metrics Summary:", "info");
+				logToDebugConsole(`Cell Width: ${Math.round(gridData.metrics.cellWidth)}px`, "info");
+				logToDebugConsole(`Cell Height: ${Math.round(gridData.metrics.cellHeight)}px`, "info");
+				logToDebugConsole(`Rotation: ${gridData.metrics.rotation.toFixed(1)}°`, "info");
+				logToDebugConsole(`Confidence: ${(gridData.metrics.confidence * 100).toFixed(0)}%`, "info");
 				
 				if (gridData.metrics.realWorldScale) {
-					metricsText += `\nScale: 1px = ${(gridData.metrics.realWorldScale.width / gridData.metrics.cellWidth).toFixed(5)}m`;
+					const scale = (gridData.metrics.realWorldScale.width / gridData.metrics.cellWidth).toFixed(5);
+					logToDebugConsole(`Scale: 1px = ${scale}m`, "info");
 				}
 				
 				if (gridData.metrics.algorithm) {
-					metricsText += `\nMethod: ${gridData.metrics.algorithm}`;
+					logToDebugConsole(`Method: ${gridData.metrics.algorithm}`, "info");
 				}
-				
-				// Create floating metrics display that fades out
-				const metricsPoint = new paper.Point(
-					paper.view.center.x, 
-					paper.view.bounds.y + 100
-				);
-				
-				const metricsDisplay = new paper.PointText({
-					point: metricsPoint,
-					content: metricsText,
-					fillColor: 'black',
-					backgroundColor: new paper.Color(1, 1, 1, 0.7),
-					fontSize: 14,
-					fontFamily: 'monospace',
-					justification: 'center'
-				});
-				
-				// Add background for better readability
-				const padding = 10;
-				const background = new paper.Path.Rectangle({
-					rectangle: metricsDisplay.bounds.expand(padding),
-					fillColor: new paper.Color(1, 1, 1, 0.7),
-					strokeColor: currentColor,
-					strokeWidth: 1
-				});
-				
-				// Ensure background is behind text
-				background.sendToBack();
-				
-				// Add to a temporary group
-				const metricsGroup = new paper.Group([background, metricsDisplay]);
-				
-				// Fade out and remove after delay
-				setTimeout(() => {
-					const fadeInterval = setInterval(() => {
-						if (metricsGroup.opacity > 0.05) {
-							metricsGroup.opacity -= 0.05;
-						} else {
-							clearInterval(fadeInterval);
-							metricsGroup.remove();
-						}
-						paper.view.update();
-					}, 100);
-				}, 5000);
-				
-				// Also show as a notification for longer visibility
-				showSuccessMessage(metricsText, 10000);
 			}
 		}
 
@@ -2628,12 +2656,13 @@
 		function loadPreviousLabels(existingLabels) {
 			if (!existingLabels) {
 				console.log("No existing labels to load");
+				logToDebugConsole("No existing labels to load", "info");
 				return;
 			}
 			
 			try {
 				showLoadingOverlay("Loading previous labels...");
-				console.log("Loading previous labels:", existingLabels);
+				logToDebugConsole("Loading previous labels...", "info");
 				
 				let loadedShapes = 0;
 				let loadedMeasurements = 0;
@@ -2641,11 +2670,14 @@
 				
 				// Load features (shapes)
 				if (existingLabels.features && existingLabels.features.length > 0) {
+					logToDebugConsole(`Found ${existingLabels.features.length} shapes to load`, "info");
+					
 					existingLabels.features.forEach(feature => {
 						try {
 							// Validate feature
 							if (!feature.geometry || !feature.properties) {
 								console.warn("Invalid feature structure:", feature);
+								logToDebugConsole("Invalid feature structure", "warning");
 								errorCount++;
 								return;
 							}
@@ -2656,6 +2688,7 @@
 							
 							if (!categoryName) {
 								console.warn("Feature missing category:", feature);
+								logToDebugConsole("Feature missing category, using 'Unknown'", "warning");
 								categoryName = "Unknown";
 							}
 							
@@ -2680,6 +2713,7 @@
 								const coords = feature.geometry.coordinates;
 								if (!coords || coords.length < 2) {
 									console.warn("Invalid Point coordinates:", coords);
+									logToDebugConsole("Invalid Point coordinates", "warning");
 									errorCount++;
 									return;
 								}
@@ -2695,12 +2729,15 @@
 									strokeWidth: 2,
 									fillColor: globals.blueprintStyle.shapes.fillColor
 								});
+								
+								logToDebugConsole(`Loaded Point at (${centerX}, ${centerY}) with radius ${radius}`, "success");
 							}
 							else if (feature.geometry.type === 'Polygon') {
 								// Polygon is a closed path
 								const rings = feature.geometry.coordinates;
 								if (!rings || !rings.length || !rings[0] || rings[0].length < 3) {
 									console.warn("Invalid Polygon coordinates:", rings);
+									logToDebugConsole("Invalid Polygon coordinates", "warning");
 									errorCount++;
 									return;
 								}
@@ -2721,12 +2758,15 @@
 								
 								// Close the path
 								path.closed = true;
+								
+								logToDebugConsole(`Loaded Polygon with ${coords.length} points in category ${categoryName}`, "success");
 							}
 							else if (feature.geometry.type === 'LineString') {
 								// LineString is an open path
 								const coords = feature.geometry.coordinates;
 								if (!coords || !coords.length || coords.length < 2) {
 									console.warn("Invalid LineString coordinates:", coords);
+									logToDebugConsole("Invalid LineString coordinates", "warning");
 									errorCount++;
 									return;
 								}
@@ -2741,9 +2781,12 @@
 										path.add(new paper.Point(point[0], point[1]));
 									}
 								});
+								
+								logToDebugConsole(`Loaded LineString with ${coords.length} points`, "success");
 							}
 							else {
 								console.warn("Unsupported geometry type:", feature.geometry.type);
+								logToDebugConsole(`Unsupported geometry type: ${feature.geometry.type}`, "warning");
 								errorCount++;
 								return;
 							}
@@ -2751,21 +2794,21 @@
 							// Set metadata for the path
 							if (path) {
 								path.data = {
-										category: categoryName,
-										color: categoryColor,
-										createdAt: feature.properties.createdAt || new Date().getTime()
+									category: categoryName,
+									color: categoryColor,
+									createdAt: feature.properties.createdAt || new Date().getTime()
 								};
 								
 								// Add to undo stack
 								addToUndoStack(path);
 								loadedShapes++;
 								
-								// Add visual highlight effect for loaded shapes
+								// Highlight briefly with a blink
 								const origStrokeWidth = path.strokeWidth;
 								const origStrokeColor = path.strokeColor;
 								const origFillColor = path.fillColor ? path.fillColor.clone() : null;
 								
-								// Highlight effect
+								// Quick blink effect
 								path.strokeWidth = origStrokeWidth * 2;
 								path.strokeColor = new paper.Color(1, 0.8, 0);
 								if (path.fillColor) {
@@ -2782,10 +2825,11 @@
 										}
 										paper.view.update();
 									}
-								}, 1000);
+								}, 300);
 							}
 						} catch (e) {
 							console.error("Error creating path from feature:", e, feature);
+							logToDebugConsole(`Error creating path: ${e.message}`, "error");
 							errorCount++;
 						}
 					});
@@ -2793,11 +2837,14 @@
 				
 				// Load measurements
 				if (existingLabels.measurements && existingLabels.measurements.length > 0) {
+					logToDebugConsole(`Found ${existingLabels.measurements.length} measurements to load`, "info");
+					
 					existingLabels.measurements.forEach(measurement => {
 						try {
 							// Validate measurement
 							if (!measurement.startPoint || !measurement.endPoint) {
 								console.warn("Invalid measurement structure:", measurement);
+								logToDebugConsole("Invalid measurement structure", "warning");
 								errorCount++;
 								return;
 							}
@@ -2834,16 +2881,15 @@
 							globals.savedMeasurements.push(dimensionGroup);
 							loadedMeasurements++;
 							
-							// Add visual highlight effect for loaded measurements
+							logToDebugConsole(`Loaded measurement: ${labelText}`, "success");
+							
+							// Brief highlight effect
 							const origStrokeColor = dimensionGroup.children[0].strokeColor;
 							
-							// Highlight effect - make all children glow
+							// Highlight effect - make all children glow briefly
 							dimensionGroup.children.forEach(child => {
 								if (child.strokeColor) {
 									child.strokeColor = new paper.Color(1, 0.8, 0);
-								}
-								if (child.fillColor) {
-									child.fillColor = new paper.Color(1, 1, 0, 0.5);
 								}
 							});
 							
@@ -2854,15 +2900,13 @@
 										if (child.strokeColor) {
 											child.strokeColor = origStrokeColor;
 										}
-										if (child.fillColor && child instanceof paper.Path.Circle) {
-											child.fillColor = origStrokeColor;
-										}
 									});
 									paper.view.update();
 								}
-							}, 1000);
+							}, 300);
 						} catch (e) {
 							console.error("Error creating measurement:", e, measurement);
+							logToDebugConsole(`Error creating measurement: ${e.message}`, "error");
 							errorCount++;
 						}
 					});
@@ -2872,155 +2916,61 @@
 				if (existingLabels.metadata && existingLabels.metadata.gridMetrics) {
 					globals.gridMetrics = existingLabels.metadata.gridMetrics;
 					console.log("Loaded grid metrics from previous labels:", globals.gridMetrics);
-					
-					// If grid metrics loaded, add indicator text
-					const gridMetricsText = new paper.PointText({
-						point: new paper.Point(paper.view.center.x, 40),
-						content: "Grid metrics loaded from previous labels",
-						fillColor: 'blue',
-						fontSize: 14,
-						justification: 'center'
-					});
-					
-					// Background for text
-					const bg = new paper.Path.Rectangle({
-						rectangle: gridMetricsText.bounds.expand(5),
-						fillColor: new paper.Color(1, 1, 1, 0.8),
-						strokeColor: new paper.Color(0, 0.5, 1),
-						strokeWidth: 1
-					});
-					bg.sendToBack();
-					
-					// Group and fade out after delay
-					const gridTextGroup = new paper.Group([bg, gridMetricsText]);
-					setTimeout(() => {
-						const fadeInterval = setInterval(() => {
-							if (gridTextGroup.opacity > 0.05) {
-								gridTextGroup.opacity -= 0.05;
-							} else {
-								clearInterval(fadeInterval);
-								gridTextGroup.remove();
-							}
-							paper.view.update();
-						}, 50);
-					}, 3000);
+					logToDebugConsole("Loaded grid metrics from previous labels", "info");
 				}
 				
 				// Update the view
 				paper.view.update();
 				
 				// Build detailed message about loaded items
-				let successMessage = "";
+				let summaryMessage = "";
 				
 				const totalLoaded = loadedShapes + loadedMeasurements;
 				if (totalLoaded > 0) {
-					successMessage = `Loaded ${totalLoaded} previous annotations `;
-					
-					const details = [];
-					if (loadedShapes > 0) {
-						details.push(`${loadedShapes} shapes`);
+						summaryMessage = `Loaded ${totalLoaded} previous annotations `;
+						
+						const details = [];
+						if (loadedShapes > 0) {
+							details.push(`${loadedShapes} shapes`);
+						}
+						if (loadedMeasurements > 0) {
+							details.push(`${loadedMeasurements} measurements`);
+						}
+						
+						summaryMessage += `(${details.join(", ")})`;
+						
+						if (errorCount > 0) {
+							summaryMessage += ` with ${errorCount} errors`;
+						}
+						
+						logToDebugConsole(summaryMessage, "success");
+					} else if (errorCount > 0) {
+						summaryMessage = `No labels loaded. Found ${errorCount} errors in label data.`;
+						logToDebugConsole(summaryMessage, "warning");
+					} else {
+						summaryMessage = "No previous labels found for this image.";
+						logToDebugConsole(summaryMessage, "info");
 					}
-					if (loadedMeasurements > 0) {
-						details.push(`${loadedMeasurements} measurements`);
-					}
-					
-					successMessage += `(${details.join(", ")})`;
-					
-					if (errorCount > 0) {
-						successMessage += ` with ${errorCount} errors`;
-					}
-					
-					// Add visual indicator in the canvas
-					const loadedText = new paper.PointText({
-						point: new paper.Point(paper.view.center.x, 80),
-						content: successMessage,
-						fillColor: 'green',
-						fontSize: 14,
-						justification: 'center'
-					});
-					
-					// Background for text
-					const textBg = new paper.Path.Rectangle({
-						rectangle: loadedText.bounds.expand(5),
-						fillColor: new paper.Color(1, 1, 1, 0.8),
-						strokeColor: new paper.Color(0, 0.7, 0),
-						strokeWidth: 1
-					});
-					textBg.sendToBack();
-					
-					// Group and fade out after delay
-					const loadedTextGroup = new paper.Group([textBg, loadedText]);
-					setTimeout(() => {
-						const fadeInterval = setInterval(() => {
-							if (loadedTextGroup.opacity > 0.05) {
-								loadedTextGroup.opacity -= 0.05;
-							} else {
-								clearInterval(fadeInterval);
-								loadedTextGroup.remove();
-							}
-							paper.view.update();
-						}, 50);
-					}, 5000);
-				} else if (errorCount > 0) {
-					successMessage = `No labels loaded. Found ${errorCount} errors in label data.`;
-				} else {
-					successMessage = "No previous labels found for this image.";
-				}
 				
 				hideLoadingOverlay();
 				
-				// Show success message
-				if (totalLoaded > 0) {
-					showSuccessMessage(successMessage);
-				} else if (errorCount > 0) {
-					showWarningMessage(successMessage);
-				} else {
-					// Don't show any message if no labels found
-				}
+				// Show summary message in console log
+				console.log(summaryMessage);
 			} catch (e) {
 				hideLoadingOverlay();
 				console.error("Error loading previous labels:", e);
-				showErrorMessage("Error loading previous labels: " + e.message);
+				logToDebugConsole(`Error loading previous labels: ${e.message}`, "error");
 			}
 		}
 	});
 
 	// Function to show error, success, or warning messages to user
 	function showNotification(message, type = 'error', duration = 5000) {
-		// Create notification container if it doesn't exist
-		if ($('#notification-container').length === 0) {
-			$('body').append('<div id="notification-container"></div>');
-		}
+		// Log to debug console
+		logToDebugConsole(message, type);
 		
-		// Generate a unique ID for this notification
-		const notificationId = 'notification-' + Date.now();
-		
-		// Create notification element
-		const notification = $(`
-			<div id="${notificationId}" class="notification ${type}">
-				<span class="close-btn">&times;</span>
-				${message}
-			</div>
-		`);
-		
-		// Add to container
-		$('#notification-container').append(notification);
-		
-		// Add click handler to close button
-		$(`#${notificationId} .close-btn`).on('click', function() {
-			$(`#${notificationId}`).css('animation', 'fade-out 0.5s').on('animationend', function() {
-				$(this).remove();
-			});
-		});
-		
-		// Auto-remove after duration
-		setTimeout(() => {
-			if ($(`#${notificationId}`).length) {
-				$(`#${notificationId}`).css('animation', 'fade-out 0.5s').on('animationend', function() {
-					$(this).remove();
-				});
-			}
-		}, duration);
+		// Also log to browser console for debugging
+		console.log(`[${type.toUpperCase()}] ${message}`);
 	}
 
 	// Convenience functions for different notification types
@@ -3035,6 +2985,48 @@
 	function showWarningMessage(message, duration = 5000) {
 		showNotification(message, 'warning', duration);
 	}
+	
+	// Function to log to debug console
+	function logToDebugConsole(message, type = 'log') {
+		// Get the debug console element
+		const debugConsole = document.getElementById('debug-console');
+		if (!debugConsole) return;
+		
+		// Create a new log entry
+		const logEntry = document.createElement('div');
+		logEntry.className = `log ${type}`;
+		
+		// Add timestamp
+		const now = new Date();
+		const timestamp = `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}:${now.getSeconds().toString().padStart(2, '0')}.${now.getMilliseconds().toString().padStart(3, '0')}`;
+		
+		// Set log content
+		logEntry.innerHTML = `[${timestamp}] [${type.toUpperCase()}] ${message}`;
+		
+		// Add to console
+		debugConsole.appendChild(logEntry);
+		
+		// Auto-scroll to bottom
+		debugConsole.scrollTop = debugConsole.scrollHeight;
+	}
+	
+	// Initialize debug console
+	$(document).ready(function() {
+		// Handle toggle button for console
+		$('#console-toggle').click(function() {
+			const debugConsole = $('#debug-console');
+			if (debugConsole.hasClass('expanded')) {
+				debugConsole.removeClass('expanded');
+				$(this).text('Show Debug Console');
+			} else {
+				debugConsole.addClass('expanded');
+				$(this).text('Hide Debug Console');
+			}
+		});
+		
+		// Log initial message
+		logToDebugConsole('Debug console initialized', 'info');
+	});
 
 	// Function to save the canvas as a PDF for printing on 44" wide paper
 	function saveToPDF() {
