@@ -30,6 +30,7 @@
             border-radius: 8px;
             box-shadow: 0 2px 10px rgba(0,0,0,0.1);
             font-family: Arial, sans-serif;
+            max-width: 220px;
         }
         .controls-overlay button {
             display: block;
@@ -44,6 +45,48 @@
         }
         .controls-overlay button:hover {
             background: #45a049;
+        }
+        .controls-overlay button.active {
+            background: #ff4444;
+        }
+        .button-group {
+            margin-bottom: 15px;
+            border-bottom: 1px solid #ddd;
+            padding-bottom: 10px;
+        }
+        .button-group:last-child {
+            border-bottom: none;
+            margin-bottom: 0;
+        }
+        .button-group h3 {
+            margin: 0 0 8px 0;
+            font-size: 14px;
+            color: #333;
+        }
+        .view-buttons {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 5px;
+            margin-top: 6px;
+            margin-bottom: 6px;
+        }
+        .view-buttons button {
+            flex: 0 0 calc(33% - 5px);
+            margin: 0;
+            padding: 5px;
+            font-size: 12px;
+        }
+        .view-buttons button.camera-mode {
+            flex: 0 0 100%;
+            margin-top: 5px;
+            font-weight: bold;
+        }
+        .control-mode-label {
+            display: block;
+            margin-top: 10px;
+            font-weight: bold;
+            text-align: center;
+            font-size: 12px;
         }
         .model-info {
             margin-top: 15px;
@@ -76,6 +119,39 @@
             margin: 0;
             padding-left: 20px;
         }
+        #annotations {
+            position: absolute;
+            bottom: 20px;
+            right: 20px;
+            background: rgba(255, 255, 255, 0.9);
+            padding: 15px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            font-family: Arial, sans-serif;
+            max-width: 250px;
+            max-height: 200px;
+            overflow-y: auto;
+        }
+        #annotations h3 {
+            margin: 0 0 10px 0;
+        }
+        #annotations ul {
+            margin: 0;
+            padding-left: 20px;
+        }
+        #annotations li {
+            margin-bottom: 5px;
+        }
+        .annotation-label {
+            color: white;
+            background-color: rgba(0, 0, 0, 0.7);
+            padding: 5px;
+            border-radius: 4px;
+            font-size: 12px;
+            pointer-events: none;
+            font-weight: bold;
+            text-shadow: 1px 1px 1px rgba(0,0,0,0.5);
+        }
     </style>
 </head>
 <body>
@@ -83,28 +159,50 @@
     <div id="loading">Loading 3D model...</div>
     
     <div class="controls-overlay">
-        <button id="resetView">Reset View</button>
-        <button id="toggleWireframe">Toggle Wireframe</button>
-        <button id="toggleGrid">Toggle Grid</button>
-        <button id="toggleAxes">Toggle Axes</button>
-        <div class="model-info">
+        <div class="button-group">
+            <h3>View Controls</h3>
+            <div class="view-buttons">
+                <button id="viewFront">Front</button>
+                <button id="viewBack">Back</button>
+                <button id="viewLeft">Left</button>
+                <button id="viewRight">Right</button>
+                <button id="viewTop">Top</button>
+                <button id="viewBottom">Bottom</button>
+                <button id="toggleCameraMode" class="camera-mode">Perspective</button>
+            </div>
+        </div>
+        
+        <div class="button-group">
+            <h3>Measurement</h3>
+            <button id="measureMode">Measure</button>
+            <button id="clearMeasurements">Clear Measurements</button>
+        </div>
+        
+        <div class="button-group">
             <h3>Model Information</h3>
             <p id="modelName">Loading...</p>
             <p id="modelDimensions">Loading...</p>
+            <p id="modelCalibration">Calibration: pending...</p>
         </div>
     </div>
 
     <div class="keyboard-shortcuts">
         <h3>Keyboard Shortcuts</h3>
         <ul>
-            <li>R - Reset View</li>
-            <li>W - Toggle Wireframe</li>
-            <li>G - Toggle Grid</li>
-            <li>A - Toggle Axes</li>
-            <li>Space - Toggle Auto Rotation</li>
-            <li>+ - Increase Rotation Speed</li>
-            <li>- - Decrease Rotation Speed</li>
+            <li>M - Toggle Measure Mode</li>
+            <li>C - Clear Measurements</li>
+            <li>P - Toggle Camera Mode</li>
+            <li>2-6 - Orthographic Views</li>
+            <li>Escape - Cancel Current Measurement</li>
+            <li>Left-drag - Rotate</li>
+            <li>Middle-drag - Pan</li>
+            <li>Scroll - Zoom</li>
         </ul>
+    </div>
+
+    <div id="annotations">
+        <h3>Measurements</h3>
+        <ul id="measurementsList"></ul>
     </div>
 
     <!-- Import maps polyfill for browsers without native support -->
@@ -123,143 +221,662 @@
         import * as THREE from 'three';
         import { STLLoader } from 'three/addons/loaders/STLLoader.js';
         import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+        import { CSS2DRenderer, CSS2DObject } from 'three/addons/renderers/CSS2DRenderer.js';
 
         // Scene setup
         const scene = new THREE.Scene();
-        const camera = new THREE.PerspectiveCamera(75, window.innerWidth/window.innerHeight, 0.1, 1000);
+        
+        // Unit for measurements - inches by default
+        let currentUnit = 0.0254; // Default unit is inches
+        
+        // Control states
+        let isOrthographic = false;
+        
+        // Set up both cameras: perspective and orthographic
+        const perspectiveCamera = new THREE.PerspectiveCamera(75, window.innerWidth/window.innerHeight, 0.1, 1000);
+        const orthographicCamera = new THREE.OrthographicCamera(
+            window.innerWidth / -100, 
+            window.innerWidth / 100, 
+            window.innerHeight / 100, 
+            window.innerHeight / -100, 
+            0.1, 
+            1000
+        );
+        
+        // Start with perspective camera
+        let camera = perspectiveCamera;
+        
         const renderer = new THREE.WebGLRenderer({ 
             canvas: document.getElementById('viewer'), 
             antialias: true,
             alpha: true 
         });
         renderer.setSize(window.innerWidth, window.innerHeight);
-        renderer.setClearColor(0xf0f0f0);
+        renderer.setClearColor(0x303040); // Darker blue-gray background for better contrast
         renderer.setPixelRatio(window.devicePixelRatio);
         
+        // Label renderer
+        const labelRenderer = new CSS2DRenderer();
+        labelRenderer.setSize(window.innerWidth, window.innerHeight);
+        labelRenderer.domElement.style.position = 'absolute';
+        labelRenderer.domElement.style.top = '0px';
+        labelRenderer.domElement.style.pointerEvents = 'none';
+        document.body.appendChild(labelRenderer.domElement);
+        
         // Enhanced lighting setup
-        const ambientLight = new THREE.AmbientLight(0x606060, 3);
+        const ambientLight = new THREE.AmbientLight(0x404050, 1.5);
         scene.add(ambientLight);
         
-        const mainLight = new THREE.DirectionalLight(0xffffff, 1.5);
+        const mainLight = new THREE.DirectionalLight(0xffffff, 2.5);
         mainLight.position.set(1, 1, 1);
         scene.add(mainLight);
         
-        const secondaryLight = new THREE.DirectionalLight(0xffffff, 1.0);
+        const secondaryLight = new THREE.DirectionalLight(0xffffff, 1.5);
         secondaryLight.position.set(-1, -1, -1);
         scene.add(secondaryLight);
         
-        // Initial camera position
-        camera.position.set(0, -5, 0);
+        // Add rim light to enhance edges
+        const rimLight = new THREE.DirectionalLight(0xaaccff, 1.0);
+        rimLight.position.set(0, 0, -1);
+        scene.add(rimLight);
         
         // Add orbit controls with improved configuration
         const controls = new OrbitControls(camera, renderer.domElement);
+        setupControls();
+        
+        function setupControls() {
+            // Orbit controls settings
         controls.enableDamping = true;
-        controls.dampingFactor = 0.25;
+            controls.dampingFactor = 0.15;
         controls.screenSpacePanning = true;
         controls.minDistance = 0.5;
         controls.maxDistance = 100;
-        controls.rotateSpeed = 0.7;
+            controls.rotateSpeed = 0.8;
         controls.zoomSpeed = 1.0;
-        controls.panSpeed = 0.7;
+            controls.panSpeed = 0.8;
         controls.enableTouch = true;
+            
+            // Use standard orbit control configuration for Y-up world
+            controls.minPolarAngle = 0;
+            controls.maxPolarAngle = Math.PI;
+            
+            // Set mouse buttons
+            controls.mouseButtons = {
+                LEFT: THREE.MOUSE.ROTATE,
+                MIDDLE: THREE.MOUSE.PAN,
+                RIGHT: THREE.MOUSE.PAN
+            };
+            
         controls.touches = {
             ONE: THREE.TOUCH.ROTATE,
             TWO: THREE.TOUCH.DOLLY_PAN
         };
         
-        // Enhanced orbit controls configuration
-        controls.enableZoom = true;
-        controls.autoRotate = false;
-        controls.autoRotateSpeed = 2.0;
-        controls.enableKeys = true;
-        controls.keys = {
-            LEFT: 'ArrowLeft',
-            UP: 'ArrowUp',
-            RIGHT: 'ArrowRight',
-            BOTTOM: 'ArrowDown'
-        };
-        controls.mouseButtons = {
-            LEFT: THREE.MOUSE.ROTATE,
-            MIDDLE: THREE.MOUSE.DOLLY,
-            RIGHT: THREE.MOUSE.PAN
-        };
-        controls.maxPolarAngle = Math.PI; // Allow full vertical rotation
-        controls.minPolarAngle = 0;
-        controls.maxAzimuthAngle = Infinity; // Allow full horizontal rotation
-        controls.minAzimuthAngle = -Infinity;
-        controls.update();
+            // Remove the listener that forces Z-up
+            
+            // Add events to detect when user starts rotating
+            controls.addEventListener('start', handleControlsStart);
+        }
+        
+        // Track if we're in a predefined view
+        let inPredefinedView = false;
+        
+        function handleControlsStart() {
+            // If in orthographic mode with aligned grid, reset when user starts manual control
+            if (isOrthographic && inPredefinedView) {
+                // No longer in a predefined view when user starts rotating manually
+                inPredefinedView = false;
+            }
+        }
 
-        // Add transformation controls
-        let isAutoRotating = false;
-        let currentRotationSpeed = 0;
-        const rotationSpeeds = [0, 0.5, 1, 2, 4]; // Different rotation speeds
-        let currentRotationSpeedIndex = 0;
-
-        // Add auto-rotation control to UI
-        const autoRotateButton = document.createElement('button');
-        autoRotateButton.id = 'toggleAutoRotate';
-        autoRotateButton.textContent = 'Auto Rotate';
-        document.querySelector('.controls-overlay').insertBefore(
-            autoRotateButton,
-            document.querySelector('.model-info')
-        );
-
-        const rotationSpeedButton = document.createElement('button');
-        rotationSpeedButton.id = 'changeRotationSpeed';
-        rotationSpeedButton.textContent = 'Rotation Speed: Normal';
-        document.querySelector('.controls-overlay').insertBefore(
-            rotationSpeedButton,
-            document.querySelector('.model-info')
-        );
+        // Model bounds for orthographic sizing
+        let modelSize = new THREE.Vector3(10, 10, 10);
+        let modelCenter = new THREE.Vector3(0, 0, 0);
 
         // Add visual helpers
-        const gridHelper = new THREE.GridHelper(10, 10);
-        gridHelper.rotation.x = Math.PI / 2; // Make grid the ground plane (XY, Z up)
-        scene.add(gridHelper);
-        
         const axesHelper = new THREE.AxesHelper(5);
         scene.add(axesHelper);
 
         // UI Controls
         let currentMesh = null;
         let isWireframe = false;
-        let isGridVisible = true;
         let isAxesVisible = true;
+        let isMeasureMode = false;
+        
+        // Measurement variables
+        let measurementPoints = [];
+        let measurementLine = null;
+        let measurements = [];
+        let measurementLabels = [];
+        let previewLine = null; // For showing line before second point is clicked
+        let previewLabel = null; // For showing distance before second point is clicked
+        const raycaster = new THREE.Raycaster();
+        const mouse = new THREE.Vector2();
+        const measurementGroup = new THREE.Group();
+        scene.add(measurementGroup);
 
-        document.getElementById('resetView').addEventListener('click', resetCamera);
-        document.getElementById('toggleWireframe').addEventListener('click', toggleWireframe);
-        document.getElementById('toggleGrid').addEventListener('click', toggleGrid);
-        document.getElementById('toggleAxes').addEventListener('click', toggleAxes);
-        autoRotateButton.addEventListener('click', toggleAutoRotate);
-        rotationSpeedButton.addEventListener('click', changeRotationSpeed);
+        document.getElementById('measureMode').addEventListener('click', toggleMeasureMode);
+        document.getElementById('clearMeasurements').addEventListener('click', clearMeasurements);
 
         // Enhanced keyboard controls
         document.addEventListener('keydown', (event) => {
             switch(event.key.toLowerCase()) {
-                case 'r':
-                    resetCamera();
+                case 'm':
+                    toggleMeasureMode();
                     break;
-                case 'w':
-                    toggleWireframe();
+                case 'c':
+                    clearMeasurements();
                     break;
-                case 'g':
-                    toggleGrid();
+                case 'p':
+                    toggleCameraMode();
                     break;
-                case 'a':
-                    toggleAxes();
+                case '2':
+                    setViewBack();
                     break;
-                case ' ':
-                    toggleAutoRotate();
+                case '3':
+                    setViewLeft();
                     break;
-                case '+':
-                    increaseRotationSpeed();
+                case '4':
+                    setViewRight();
                     break;
-                case '-':
-                    decreaseRotationSpeed();
+                case '5':
+                    setViewTop();
+                    break;
+                case '6':
+                    setViewBottom();
+                    break;
+                case 'escape':
+                    cancelCurrentMeasurement();
                     break;
             }
         });
 
+        // Mouse event listeners for measurements
+        renderer.domElement.addEventListener('pointerdown', onPointerDown);
+        renderer.domElement.addEventListener('pointermove', onPointerMove);
+        
+        function onPointerDown(event) {
+            if (!isMeasureMode) return;
+            
+            // Calculate mouse position in normalized device coordinates
+            mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
+            mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
+            
+            // Update the picking ray
+            raycaster.setFromCamera(mouse, camera);
+            
+            let intersectionPoint = null;
+            
+            // In orthographic mode, always place points on the orthographic plane
+            if (isOrthographic) {
+                // Get the ray from the raycaster
+                const ray = raycaster.ray;
+                
+                // Find the center point of the scene
+                const sceneCenter = modelCenter ? modelCenter.clone() : new THREE.Vector3(0, 0, 0);
+                
+                // Project ray to the plane defined by sceneCenter and camera direction
+                const planeNormal = new THREE.Vector3().copy(camera.getWorldDirection(new THREE.Vector3()));
+                const plane = new THREE.Plane().setFromNormalAndCoplanarPoint(planeNormal, sceneCenter);
+                
+                // Find where the ray intersects this plane
+                intersectionPoint = new THREE.Vector3();
+                ray.intersectPlane(plane, intersectionPoint);
+                
+                // If for some reason we didn't get an intersection, fall back to model or default
+                if (!intersectionPoint) {
+                    // Try model intersection
+                    if (currentMesh) {
+                        const modelIntersects = raycaster.intersectObject(currentMesh);
+                        if (modelIntersects.length > 0) {
+                            intersectionPoint = modelIntersects[0].point.clone();
+                        }
+                    }
+                    
+                    // If still no point, create one at a standard distance
+                    if (!intersectionPoint) {
+                        intersectionPoint = new THREE.Vector3();
+                        intersectionPoint.copy(ray.origin);
+                        intersectionPoint.addScaledVector(ray.direction, 10);
+                    }
+                }
+            } 
+            // In perspective mode, check for model intersection first, then fall back to ray
+            else {
+                // Try to find an intersection with the model first
+                if (currentMesh) {
+                    const intersects = raycaster.intersectObject(currentMesh);
+                    if (intersects.length > 0) {
+                        intersectionPoint = intersects[0].point.clone();
+                    }
+                }
+                
+                // If no intersection, create a point in 3D space at a reasonable distance
+                if (!intersectionPoint) {
+                    const ray = raycaster.ray;
+                    intersectionPoint = new THREE.Vector3();
+                    intersectionPoint.copy(ray.origin);
+                    intersectionPoint.addScaledVector(ray.direction, 10); // Standard distance
+                }
+            }
+            
+            // Add the measurement point
+            addMeasurementPoint(intersectionPoint);
+        }
+        
+        function onPointerMove(event) {
+            if (!isMeasureMode || measurementPoints.length === 0) return;
+            
+            // Calculate mouse position in normalized device coordinates
+            mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
+            mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
+            
+            // Update the picking ray
+            raycaster.setFromCamera(mouse, camera);
+            
+            let intersectionPoint = null;
+            
+            // Same intersection logic as in onPointerDown
+            if (isOrthographic) {
+                const ray = raycaster.ray;
+                const sceneCenter = modelCenter ? modelCenter.clone() : new THREE.Vector3(0, 0, 0);
+                const planeNormal = new THREE.Vector3().copy(camera.getWorldDirection(new THREE.Vector3()));
+                const plane = new THREE.Plane().setFromNormalAndCoplanarPoint(planeNormal, sceneCenter);
+                
+                intersectionPoint = new THREE.Vector3();
+                ray.intersectPlane(plane, intersectionPoint);
+                
+                if (!intersectionPoint) {
+                    if (currentMesh) {
+                        const modelIntersects = raycaster.intersectObject(currentMesh);
+                        if (modelIntersects.length > 0) {
+                            intersectionPoint = modelIntersects[0].point.clone();
+                        }
+                    }
+                    
+                    if (!intersectionPoint) {
+                        intersectionPoint = new THREE.Vector3();
+                        intersectionPoint.copy(ray.origin);
+                        intersectionPoint.addScaledVector(ray.direction, 10);
+                    }
+                }
+            } else {
+                if (currentMesh) {
+                    const intersects = raycaster.intersectObject(currentMesh);
+                    if (intersects.length > 0) {
+                        intersectionPoint = intersects[0].point.clone();
+                    }
+                }
+                
+                if (!intersectionPoint) {
+                    const ray = raycaster.ray;
+                    intersectionPoint = new THREE.Vector3();
+                    intersectionPoint.copy(ray.origin);
+                    intersectionPoint.addScaledVector(ray.direction, 10);
+                }
+            }
+            
+            // Update preview line
+            updatePreviewLine(measurementPoints[0], intersectionPoint);
+        }
+        
+        function updatePreviewLine(point1, point2) {
+            // Remove existing preview if any
+            if (previewLine) {
+                measurementGroup.remove(previewLine);
+                previewLine = null;
+            }
+            
+            if (previewLabel) {
+                measurementGroup.remove(previewLabel);
+                previewLabel = null;
+            }
+            
+            // Create a more visible preview line between points
+            const material = new THREE.LineDashedMaterial({ 
+                color: 0x3498db, // Light blue for preview
+                dashSize: 0.12, 
+                gapSize: 0.06,
+                linewidth: 2
+            });
+            const geometry = new THREE.BufferGeometry().setFromPoints([point1, point2]);
+            previewLine = new THREE.Line(geometry, material);
+            previewLine.computeLineDistances(); // Required for dashed lines
+            measurementGroup.add(previewLine);
+            
+            // Calculate distance for preview
+            const distance = point1.distanceTo(point2);
+            
+            // Calculate midpoint
+            const midpoint = new THREE.Vector3().addVectors(point1, point2).multiplyScalar(0.5);
+            
+            // Calculate the direction vector of the line
+            const direction = new THREE.Vector3().subVectors(point2, point1).normalize();
+            
+            // Calculate a perpendicular vector in the up direction to offset the label
+            // Use world up vector and cross product to find perpendicular direction
+            const worldUp = new THREE.Vector3(0, 1, 0);
+            const perpendicular = new THREE.Vector3().crossVectors(direction, worldUp).normalize();
+            
+            // If perpendicular is too small (line is vertical), use a different axis
+            if (perpendicular.length() < 0.1) {
+                const worldRight = new THREE.Vector3(1, 0, 0);
+                perpendicular.crossVectors(direction, worldRight).normalize();
+            }
+            
+            // Apply a larger offset to position label above the line
+            const labelOffset = 0.25; // Distance above the line
+            const labelPosition = midpoint.clone().addScaledVector(perpendicular, labelOffset);
+            
+            // Create enhanced preview label
+            const labelDiv = document.createElement('div');
+            labelDiv.className = 'annotation-label';
+            labelDiv.style.opacity = '0.9';
+            labelDiv.style.padding = '3px 6px';
+            labelDiv.style.fontSize = '13px';
+            labelDiv.style.fontWeight = 'bold';
+            labelDiv.style.backgroundColor = 'rgba(52, 152, 219, 0.7)'; // Light blue background
+            labelDiv.style.border = '1px dashed rgba(255, 0, 0, 0.7)'; // Dashed red border
+            labelDiv.textContent = getMeasurementText(distance);
+            previewLabel = new CSS2DObject(labelDiv);
+            previewLabel.position.copy(labelPosition);
+            measurementGroup.add(previewLabel);
+        }
+        
+        function addMeasurementPoint(point) {
+            // Add a more prominent crosshair marker at the point
+            const markerGroup = new THREE.Group();
+            markerGroup.position.copy(point);
+            
+            // Create larger crosshair marker (three perpendicular lines)
+            const markerSize = 0.08; // Increased size of the crosshair arms
+            const primaryColor = 0x4caf50; // Light green (replacing red)
+            const secondaryColor = 0x3498db; // Light blue
+            
+            // Primary color lines (light green)
+            const primaryMaterial = new THREE.LineBasicMaterial({ color: primaryColor, linewidth: 3 });
+            
+            // X axis line (light green)
+            const xGeometry = new THREE.BufferGeometry().setFromPoints([
+                new THREE.Vector3(-markerSize, 0, 0),
+                new THREE.Vector3(markerSize, 0, 0)
+            ]);
+            const xLine = new THREE.Line(xGeometry, primaryMaterial);
+            markerGroup.add(xLine);
+            
+            // Y axis line (light green)
+            const yGeometry = new THREE.BufferGeometry().setFromPoints([
+                new THREE.Vector3(0, -markerSize, 0),
+                new THREE.Vector3(0, markerSize, 0)
+            ]);
+            const yLine = new THREE.Line(yGeometry, primaryMaterial);
+            markerGroup.add(yLine);
+            
+            // Z axis line (light green)
+            const zGeometry = new THREE.BufferGeometry().setFromPoints([
+                new THREE.Vector3(0, 0, -markerSize),
+                new THREE.Vector3(0, 0, markerSize)
+            ]);
+            const zLine = new THREE.Line(zGeometry, primaryMaterial);
+            markerGroup.add(zLine);
+            
+            // Secondary color lines (light blue) - slightly offset for visibility
+            const secondaryMaterial = new THREE.LineBasicMaterial({ color: secondaryColor, linewidth: 1.5 });
+            const offset = 0.01; // Small offset for the second set of lines
+            
+            // X axis line (light blue)
+            const xGeometry2 = new THREE.BufferGeometry().setFromPoints([
+                new THREE.Vector3(-markerSize, offset, offset),
+                new THREE.Vector3(markerSize, offset, offset)
+            ]);
+            const xLine2 = new THREE.Line(xGeometry2, secondaryMaterial);
+            markerGroup.add(xLine2);
+            
+            // Y axis line (light blue)
+            const yGeometry2 = new THREE.BufferGeometry().setFromPoints([
+                new THREE.Vector3(offset, -markerSize, offset),
+                new THREE.Vector3(offset, markerSize, offset)
+            ]);
+            const yLine2 = new THREE.Line(yGeometry2, secondaryMaterial);
+            markerGroup.add(yLine2);
+            
+            // Z axis line (light blue)
+            const zGeometry2 = new THREE.BufferGeometry().setFromPoints([
+                new THREE.Vector3(offset, offset, -markerSize),
+                new THREE.Vector3(offset, offset, markerSize)
+            ]);
+            const zLine2 = new THREE.Line(zGeometry2, secondaryMaterial);
+            markerGroup.add(zLine2);
+            
+            // Sphere at center - make it larger and two-toned
+            const sphereGeometry = new THREE.SphereGeometry(0.02);
+            const sphereMaterial = new THREE.MeshBasicMaterial({ color: primaryColor });
+            const sphere = new THREE.Mesh(sphereGeometry, sphereMaterial);
+            markerGroup.add(sphere);
+            
+            // Outer sphere (light blue halo)
+            const outerSphereGeometry = new THREE.SphereGeometry(0.03);
+            const outerSphereMaterial = new THREE.MeshBasicMaterial({ 
+                color: secondaryColor,
+                transparent: true,
+                opacity: 0.5
+            });
+            const outerSphere = new THREE.Mesh(outerSphereGeometry, outerSphereMaterial);
+            markerGroup.add(outerSphere);
+            
+            measurementGroup.add(markerGroup);
+            measurementPoints.push(point);
+            
+            // If we have two points, create a measurement and clean up preview
+            if (measurementPoints.length === 2) {
+                // Clean up preview
+                if (previewLine) {
+                    measurementGroup.remove(previewLine);
+                    previewLine = null;
+                }
+                
+                if (previewLabel) {
+                    measurementGroup.remove(previewLabel);
+                    previewLabel = null;
+                }
+                
+                createMeasurement(measurementPoints[0], measurementPoints[1]);
+                measurementPoints = []; // Reset for the next measurement
+            }
+        }
+        
+        function createMeasurement(point1, point2) {
+            // Create a more prominent line between points with dual colors
+            const primaryColor = 0x4caf50; // Light green (replacing red)
+            const secondaryColor = 0x3498db; // Light blue
+            
+            // Create primary measurement line (light green)
+            const primaryMaterial = new THREE.LineBasicMaterial({ 
+                color: primaryColor, 
+                linewidth: 3 
+            });
+            const geometry = new THREE.BufferGeometry().setFromPoints([point1, point2]);
+            const line = new THREE.Line(geometry, primaryMaterial);
+            measurementGroup.add(line);
+            
+            // Create secondary line (light blue) with slight offset for visibility
+            const offset = new THREE.Vector3(0.01, 0.01, 0.01);
+            const secondaryMaterial = new THREE.LineBasicMaterial({ 
+                color: secondaryColor, 
+                linewidth: 2,
+                transparent: true,
+                opacity: 0.8
+            });
+            
+            // Create slightly offset points for the secondary line
+            const offsetPoint1 = point1.clone().add(offset);
+            const offsetPoint2 = point2.clone().add(offset);
+            
+            const secondaryGeometry = new THREE.BufferGeometry().setFromPoints([offsetPoint1, offsetPoint2]);
+            const secondaryLine = new THREE.Line(secondaryGeometry, secondaryMaterial);
+            measurementGroup.add(secondaryLine);
+            
+            // Calculate distance (model units)
+            const distance = point1.distanceTo(point2);
+            
+            // Calculate midpoint
+            const midpoint = new THREE.Vector3().addVectors(point1, point2).multiplyScalar(0.5);
+            
+            // Calculate the direction vector of the line
+            const direction = new THREE.Vector3().subVectors(point2, point1).normalize();
+            
+            // Calculate a perpendicular vector in the up direction to offset the label
+            // Use world up vector and cross product to find perpendicular direction
+            const worldUp = new THREE.Vector3(0, 1, 0);
+            const perpendicular = new THREE.Vector3().crossVectors(direction, worldUp).normalize();
+            
+            // If perpendicular is too small (line is vertical), use a different axis
+            if (perpendicular.length() < 0.1) {
+                const worldRight = new THREE.Vector3(1, 0, 0);
+                perpendicular.crossVectors(direction, worldRight).normalize();
+            }
+            
+            // Apply a larger offset to position label well above the line
+            const labelOffset = 0.25; // Distance above the line
+            const labelPosition = midpoint.clone().addScaledVector(perpendicular, labelOffset);
+            
+            // Create enhanced label at offset position
+            const labelDiv = document.createElement('div');
+            labelDiv.className = 'annotation-label';
+            labelDiv.style.padding = '5px 8px';
+            labelDiv.style.fontSize = '14px';
+            labelDiv.style.fontWeight = 'bold';
+            labelDiv.style.color = 'white';
+            labelDiv.style.textShadow = '1px 1px 1px rgba(0,0,0,0.5)';
+            labelDiv.style.backgroundColor = 'rgba(52, 152, 219, 0.8)'; // Light blue with transparency
+            labelDiv.style.border = '2px solid rgba(76, 175, 80, 0.7)'; // Light green border (replacing red)
+            labelDiv.textContent = getMeasurementText(distance);
+            const label = new CSS2DObject(labelDiv);
+            label.position.copy(labelPosition);
+            measurementGroup.add(label);
+            measurementLabels.push(label);
+            
+            // Store the measurement with all components
+            const measurementData = {
+                point1: point1.clone(),
+                point2: point2.clone(),
+                distance: distance,
+                line: line,
+                secondaryLine: secondaryLine,
+                label: label
+            };
+            measurements.push(measurementData);
+            
+            // Update the measurements list
+            updateMeasurementsList();
+        }
+        
+        function updateMeasurementsList() {
+            const list = document.getElementById('measurementsList');
+            list.innerHTML = '';
+            
+            measurements.forEach((measurement, index) => {
+                const listItem = document.createElement('li');
+                listItem.textContent = `Measurement ${index + 1}: ${getMeasurementText(measurement.distance)}`;
+                list.appendChild(listItem);
+            });
+        }
+        
+        function clearMeasurements() {
+            // Remove all measurement objects
+            while (measurementGroup.children.length > 0) {
+                const object = measurementGroup.children[0];
+                measurementGroup.remove(object);
+            }
+            
+            // Clear arrays
+            measurements = [];
+            measurementPoints = [];
+            measurementLabels = [];
+            
+            // Clear preview variables
+            previewLine = null;
+            previewLabel = null;
+            
+            // Update UI
+            updateMeasurementsList();
+        }
+        
+        function cancelCurrentMeasurement() {
+            // Only operate if in measure mode and there's an unfinished measurement
+            // (i.e., exactly one point placed waiting for the second point)
+            if (isMeasureMode && measurementPoints.length === 1) {
+                // Remove just the first placed point (the unfinished endpoint)
+                // Find the most recently added marker in the measurementGroup
+                let markerIndex = -1;
+                
+                // Find the marker object - it should be the most recently added non-preview object
+                for (let i = measurementGroup.children.length - 1; i >= 0; i--) {
+                    const obj = measurementGroup.children[i];
+                    if (obj !== previewLine && obj !== previewLabel) {
+                        markerIndex = i;
+                        break;
+                    }
+                }
+                
+                // If we found the marker, remove it
+                if (markerIndex >= 0) {
+                    measurementGroup.remove(measurementGroup.children[markerIndex]);
+                }
+                
+                // Clear any preview
+                if (previewLine) {
+                    measurementGroup.remove(previewLine);
+                    previewLine = null;
+                }
+                
+                if (previewLabel) {
+                    measurementGroup.remove(previewLabel);
+                    previewLabel = null;
+                }
+                
+                // Reset measurement points
+                measurementPoints = [];
+                
+                console.log("Unfinished measurement cancelled");
+            }
+        }
+        
+        function toggleMeasureMode() {
+            isMeasureMode = !isMeasureMode;
+            const measureButton = document.getElementById('measureMode');
+            measureButton.classList.toggle('active', isMeasureMode);
+            
+            if (isMeasureMode) {
+                controls.enableRotate = false;
+                measureButton.textContent = `Exit Measure Mode`;
+            } else {
+                controls.enableRotate = true;
+                measureButton.textContent = 'Measure';
+                
+                // Clean up any in-progress measurements
+                measurementPoints = [];
+                
+                // Clean up preview line if it exists
+                if (previewLine) {
+                    measurementGroup.remove(previewLine);
+                    previewLine = null;
+                }
+                
+                if (previewLabel) {
+                    measurementGroup.remove(previewLabel);
+                    previewLabel = null;
+                }
+            }
+        }
+        
+        function getMeasurementText(distance) {
+            // Convert to both inches and centimeters
+            const inches = (distance / 0.0254).toFixed(2);
+            const cm = (distance / 0.01).toFixed(2);
+            return `${inches} in / ${cm} cm`;
+        }
+        
         function resetCamera() {
             if (currentMesh) {
                 const boundingBox = currentMesh.geometry.boundingBox;
@@ -308,47 +925,21 @@
             if (currentMesh) {
                 isWireframe = !isWireframe;
                 currentMesh.material.wireframe = isWireframe;
+                
+                // Adjust transparency based on wireframe mode
+                if (isWireframe) {
+                    currentMesh.material.transparent = true;
+                    currentMesh.material.opacity = 0.7; // More transparent for wireframe
+                } else {
+                    currentMesh.material.transparent = true;
+                    currentMesh.material.opacity = 0.9; // Less transparent for solid
+                }
             }
-        }
-
-        function toggleGrid() {
-            isGridVisible = !isGridVisible;
-            gridHelper.visible = isGridVisible;
         }
 
         function toggleAxes() {
             isAxesVisible = !isAxesVisible;
             axesHelper.visible = isAxesVisible;
-        }
-
-        function toggleAutoRotate() {
-            isAutoRotating = !isAutoRotating;
-            controls.autoRotate = isAutoRotating;
-            autoRotateButton.textContent = isAutoRotate ? 'Stop Rotation' : 'Auto Rotate';
-            autoRotateButton.style.background = isAutoRotate ? '#ff4444' : '#4CAF50';
-        }
-
-        function changeRotationSpeed() {
-            currentRotationSpeedIndex = (currentRotationSpeedIndex + 1) % rotationSpeeds.length;
-            currentRotationSpeed = rotationSpeeds[currentRotationSpeedIndex];
-            controls.autoRotateSpeed = currentRotationSpeed;
-            
-            const speedLabels = ['Off', 'Slow', 'Normal', 'Fast', 'Very Fast'];
-            rotationSpeedButton.textContent = `Rotation Speed: ${speedLabels[currentRotationSpeedIndex]}`;
-        }
-
-        function increaseRotationSpeed() {
-            if (currentRotationSpeedIndex < rotationSpeeds.length - 1) {
-                currentRotationSpeedIndex++;
-                changeRotationSpeed();
-            }
-        }
-
-        function decreaseRotationSpeed() {
-            if (currentRotationSpeedIndex > 0) {
-                currentRotationSpeedIndex--;
-                changeRotationSpeed();
-            }
         }
 
         // Loading timeout
@@ -365,47 +956,135 @@
             document.getElementById('loading').style.display = 'none';
             
             const material = new THREE.MeshPhongMaterial({ 
-                color: 0x7c7c7c, 
-                specular: 0x111111, 
-                shininess: 200,
-                wireframe: true // Default to wireframe mode
+                color: 0xdddddd, // Lighter color for the model
+                specular: 0x444444, // More moderate specular highlights
+                shininess: 40, // Less shiny for more diffuse appearance
+                wireframe: false, // Default to solid mode instead of wireframe
+                flatShading: false, // Enable smooth shading
+                transparent: true, // Keep transparency
+                opacity: 0.95, // Less transparent
+                side: THREE.DoubleSide // Render both sides of faces
             });
             const mesh = new THREE.Mesh(geometry, material);
             currentMesh = mesh;
             
+            // Add edge highlighting for better visibility
+            const edges = new THREE.EdgesGeometry(geometry, 30); // 30-degree threshold
+            const edgeMaterial = new THREE.LineBasicMaterial({ 
+                color: 0x222222, 
+                linewidth: 1 
+            });
+            const wireframe = new THREE.LineSegments(edges, edgeMaterial);
+            mesh.add(wireframe);
+            
             // Center the model
             geometry.computeBoundingBox();
             const boundingBox = geometry.boundingBox;
-            const center = new THREE.Vector3();
-            boundingBox.getCenter(center);
-            // Calculate Z offset so the lowest point is at Z=0
-            const zOffset = -boundingBox.min.z;
-            // Center the model in X and Y, and lift in Z
-            mesh.position.set(-center.x, -center.y, -center.z + zOffset);
+            
+            // In Y-up world, we need to transform the model
+            // Rotate the model 90 degrees around X-axis to convert from Z-up to Y-up
+            mesh.rotation.x = -Math.PI / 2;
+            
+            // Apply rotation to bounding box to get correct extents
+            const rotatedHeight = boundingBox.max.y - boundingBox.min.y;
+            const rotatedWidth = boundingBox.max.x - boundingBox.min.x;
+            const rotatedDepth = boundingBox.max.z - boundingBox.min.z;
+            
+            // Force the mesh to update its world matrix to apply the rotation
+            mesh.updateMatrixWorld(true);
+            
+            // Calculate the bounding box of the rotated model
+            const rotatedBox = new THREE.Box3().setFromObject(mesh);
+            
+            // Get the center of the rotated bounding box
+            const rotatedCenter = new THREE.Vector3();
+            rotatedBox.getCenter(rotatedCenter);
+            
+            // Calculate the size of the rotated bounding box
+            const rotatedSize = new THREE.Vector3();
+            rotatedBox.getSize(rotatedSize);
+            
+            // Position the model so that:
+            // 1. Its bottom is at y=0 (on the XZ plane)
+            // 2. It's centered on the X and Z axes
+            mesh.position.set(
+                -rotatedCenter.x, 
+                -rotatedBox.min.y,  // This places the bottom at y=0
+                -rotatedCenter.z
+            );
+            
+            // Force another update after repositioning
+            mesh.updateMatrixWorld(true);
+            
+            // Calculate the final bounding box for verification
+            const finalBox = new THREE.Box3().setFromObject(mesh);
+            const finalCenter = new THREE.Vector3();
+            finalBox.getCenter(finalCenter);
+            
+            // Store the model center for orbit controls
+            modelCenter = new THREE.Vector3(0, finalBox.getSize(new THREE.Vector3()).y/2, 0);
+            
+            console.log("Initial bounding box:", boundingBox);
+            console.log("Rotated bounding box:", rotatedBox);
+            console.log("Final bounding box:", finalBox);
+            console.log("Model centered at:", modelCenter);
+            
+            // Get the actual height of the model for scaling
+            const modelHeight = rotatedSize.y;
+            const targetHeight = 4.28; // Target height in meters
+            const scaleFactor = targetHeight / modelHeight;
+            
+            // Apply scaling to the model to make it the correct height
+            mesh.scale.set(scaleFactor, scaleFactor, scaleFactor);
+            
+            // Store model size for orthographic camera (Y-up world, so Y is height)
+            modelSize = new THREE.Vector3(
+                (boundingBox.max.x - boundingBox.min.x) * scaleFactor,
+                (boundingBox.max.y - boundingBox.min.y) * scaleFactor,
+                (boundingBox.max.z - boundingBox.min.z) * scaleFactor
+            );
+            
+            // Set unit to inches by default (we're calibrated to real-world meters)
+            currentUnit = 0.0254; // Default to inches
             
             scene.add(mesh);
             
-            // Update model information
+            // Update model information with scaled dimensions
             const dimensions = {
-                x: (boundingBox.max.x - boundingBox.min.x).toFixed(2),
-                y: (boundingBox.max.y - boundingBox.min.y).toFixed(2),
-                z: (boundingBox.max.z - boundingBox.min.z).toFixed(2)
+                x: ((boundingBox.max.x - boundingBox.min.x) * scaleFactor).toFixed(2),
+                y: ((boundingBox.max.y - boundingBox.min.y) * scaleFactor).toFixed(2),
+                z: ((boundingBox.max.z - boundingBox.min.z) * scaleFactor).toFixed(2)
             };
             
             document.getElementById('modelName').textContent = 'Navagunjara Reborn';
             document.getElementById('modelDimensions').textContent = 
-                `Dimensions: ${dimensions.x} x ${dimensions.y} x ${dimensions.z} units`;
+                `Dimensions: ${dimensions.x} × ${dimensions.y} × ${dimensions.z} meters`;
+            document.getElementById('modelCalibration').textContent = 
+                `Calibrated height: 4.28 meters (scale factor: ${scaleFactor.toFixed(4)})`;
             
             // Adjust camera to fit the model (centered and fully visible)
-            const size = boundingBox.getSize(new THREE.Vector3());
+            const size = new THREE.Vector3(
+                (boundingBox.max.x - boundingBox.min.x) * scaleFactor,
+                (boundingBox.max.y - boundingBox.min.y) * scaleFactor,
+                (boundingBox.max.z - boundingBox.min.z) * scaleFactor
+            );
             const maxDim = Math.max(size.x, size.y, size.z);
             const distance = maxDim * 1.5; // Add margin
-            // Camera position: above and to the side, looking at origin
-            camera.position.set(distance, -distance, distance * 0.7);
-            camera.up.set(0, 0, 1);
-            camera.lookAt(0, 0, 0);
-            controls.target.set(0, 0, 0);
+            
+            // Camera position: standard position for Y-up world
+            perspectiveCamera.position.set(distance, distance, distance);
+            perspectiveCamera.up.set(0, 1, 0); // Standard Y-up
+            perspectiveCamera.lookAt(modelCenter);
+            
+            updateOrthographicCamera();
+            
+            controls.target.copy(modelCenter);
             controls.update();
+            
+            // Initialize to left view (showing front of the object)
+            setTimeout(() => {
+                setViewLeft();
+            }, 100); // Small delay to ensure everything is initialized
             
         }, 
         function(xhr) {
@@ -424,16 +1103,194 @@
             requestAnimationFrame(animate);
             controls.update();
             renderer.render(scene, camera);
+            labelRenderer.render(scene, camera);
         }
 
         animate();
 
         // Handle window resize
         window.addEventListener('resize', function() {
-            camera.aspect = window.innerWidth / window.innerHeight;
-            camera.updateProjectionMatrix();
+            const aspect = window.innerWidth / window.innerHeight;
+            
+            // Update perspective camera
+            perspectiveCamera.aspect = aspect;
+            perspectiveCamera.updateProjectionMatrix();
+            
+            // Update orthographic camera
+            updateOrthographicCamera();
+            
+            // Update renderers
             renderer.setSize(window.innerWidth, window.innerHeight);
+            labelRenderer.setSize(window.innerWidth, window.innerHeight);
         });
+        
+        // View control functions
+        function toggleCameraMode() {
+            isOrthographic = !isOrthographic;
+            
+            if (isOrthographic) {
+                // Switch to orthographic
+                updateOrthographicCamera();
+                camera = orthographicCamera;
+                document.getElementById('toggleCameraMode').textContent = 'Orthographic';
+            } else {
+                // Switch to perspective
+                camera = perspectiveCamera;
+                document.getElementById('toggleCameraMode').textContent = 'Perspective';
+            }
+            
+            // Update orbit controls
+            controls.object = camera;
+            controls.update();
+        }
+        
+        function updateOrthographicCamera() {
+            // Adjust orthographic camera based on model size and current view
+            const aspect = window.innerWidth / window.innerHeight;
+            const zoom = 2; // Adjust for better fit
+            const largestDim = Math.max(modelSize.x, modelSize.y, modelSize.z);
+            
+            orthographicCamera.left = -largestDim * zoom * aspect;
+            orthographicCamera.right = largestDim * zoom * aspect;
+            orthographicCamera.top = largestDim * zoom;
+            orthographicCamera.bottom = -largestDim * zoom;
+            orthographicCamera.near = -1000;
+            orthographicCamera.far = 1000;
+            orthographicCamera.position.copy(perspectiveCamera.position);
+            orthographicCamera.quaternion.copy(perspectiveCamera.quaternion);
+            orthographicCamera.updateProjectionMatrix();
+        }
+        
+        // Orthographic view functions - updated for object's actual orientation
+        function setViewFront() {
+            // Front view shows object's left side (from -X)
+            const extents = getModelExtents();
+            const maxDim = Math.max(extents.z, extents.y);
+            const distance = maxDim * 2.0;
+            
+            const targetPosition = new THREE.Vector3(-distance, modelCenter.y, 0);
+            const targetUp = new THREE.Vector3(0, 1, 0);
+            
+            setCameraView(targetPosition, modelCenter, targetUp);
+        }
+        
+        function setViewBack() {
+            // Back view shows object's right side (from +X)
+            const extents = getModelExtents();
+            const maxDim = Math.max(extents.z, extents.y);
+            const distance = maxDim * 2.0;
+            
+            const targetPosition = new THREE.Vector3(distance, modelCenter.y, 0);
+            const targetUp = new THREE.Vector3(0, 1, 0);
+            
+            setCameraView(targetPosition, modelCenter, targetUp);
+        }
+        
+        function setViewLeft() {
+            // Left view shows object's front (from +Z)
+            const extents = getModelExtents();
+            const maxDim = Math.max(extents.x, extents.y);
+            const distance = maxDim * 2.0;
+            
+            const targetPosition = new THREE.Vector3(0, modelCenter.y, distance);
+            const targetUp = new THREE.Vector3(0, 1, 0);
+            
+            setCameraView(targetPosition, modelCenter, targetUp);
+        }
+        
+        function setViewRight() {
+            // Right view shows object's back (from -Z)
+            const extents = getModelExtents();
+            const maxDim = Math.max(extents.x, extents.y);
+            const distance = maxDim * 2.0;
+            
+            const targetPosition = new THREE.Vector3(0, modelCenter.y, -distance);
+            const targetUp = new THREE.Vector3(0, 1, 0);
+            
+            setCameraView(targetPosition, modelCenter, targetUp);
+        }
+        
+        function setViewTop() {
+            // Top view looks at the model from +Y
+            const extents = getModelExtents();
+            const maxDim = Math.max(extents.x, extents.z);
+            const distance = maxDim * 2.0;
+            
+            const targetPosition = new THREE.Vector3(0, distance, 0);
+            const targetUp = new THREE.Vector3(0, 0, -1);
+            
+            setCameraView(targetPosition, modelCenter, targetUp);
+        }
+        
+        function setViewBottom() {
+            // Bottom view looks at the model from -Y
+            const extents = getModelExtents();
+            const maxDim = Math.max(extents.x, extents.z);
+            const distance = maxDim * 2.0;
+            
+            const targetPosition = new THREE.Vector3(0, -distance, 0);
+            const targetUp = new THREE.Vector3(0, 0, 1);
+            
+            setCameraView(targetPosition, modelCenter, targetUp);
+        }
+        
+        // Helper function to get consistent model extents
+        function getModelExtents() {
+            if (!currentMesh) {
+                return { x: 10, y: 10, z: 10 };
+            }
+            
+            // Get the bounding box of the model
+            currentMesh.geometry.computeBoundingBox();
+            const boundingBox = currentMesh.geometry.boundingBox;
+            
+            // Account for the scaling and rotation
+            const sx = currentMesh.scale.x;
+            const sy = currentMesh.scale.y;
+            const sz = currentMesh.scale.z;
+            
+            // Since we rotated 90 degrees around X-axis, the dimensions are transformed
+            return {
+                x: (boundingBox.max.x - boundingBox.min.x) * sx,
+                y: (boundingBox.max.y - boundingBox.min.y) * sy,
+                z: (boundingBox.max.z - boundingBox.min.z) * sz
+            };
+        }
+        
+        // Shared camera view setting function
+        function setCameraView(position, target, up) {
+            // Apply to both cameras
+            perspectiveCamera.position.copy(position);
+            perspectiveCamera.up.copy(up);
+            perspectiveCamera.lookAt(target);
+            
+            orthographicCamera.position.copy(position);
+            orthographicCamera.up.copy(up);
+            orthographicCamera.lookAt(target);
+            updateOrthographicCamera();
+            
+            // Update controls
+            controls.target.copy(target);
+            
+            // Switch to orthographic mode for predefined views
+            if (!isOrthographic) {
+                toggleCameraMode(); // This will switch to orthographic
+            }
+            
+            // Mark that we're in a predefined view
+            inPredefinedView = true;
+            
+            controls.update();
+        }
+
+        // Add view button event listeners
+        document.getElementById('viewFront').addEventListener('click', setViewFront);
+        document.getElementById('viewBack').addEventListener('click', setViewBack);
+        document.getElementById('viewLeft').addEventListener('click', setViewLeft);
+        document.getElementById('viewRight').addEventListener('click', setViewRight);
+        document.getElementById('viewTop').addEventListener('click', setViewTop);
+        document.getElementById('viewBottom').addEventListener('click', setViewBottom);
+        document.getElementById('toggleCameraMode').addEventListener('click', toggleCameraMode);
     </script>
 </body>
 </html>
