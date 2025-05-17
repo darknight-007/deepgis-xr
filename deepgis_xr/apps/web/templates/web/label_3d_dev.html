@@ -794,7 +794,8 @@
                     break;
                 case 'escape':
                     if (isPathMeasureMode && pathMeasurementPoints.length > 0) {
-                        cancelPathMeasurement();
+                        // Only cancel the in-progress path measurement but keep completed ones
+                        cancelInProgressPathMeasurement();
                     } else {
                         cancelCurrentMeasurement();
                     }
@@ -1345,6 +1346,12 @@
             // Clear preview variables
             previewLine = null;
             previewLabel = null;
+            
+            // Reset path measurement mode if active
+            if (isPathMeasureMode) {
+                // Start fresh path measurements
+                console.log("Cleared existing path measurements, ready for new path");
+            }
             
             // Update UI
             updateMeasurementsList();
@@ -2067,8 +2074,8 @@
             } else {
                 pathMeasureButton.textContent = '';
                 
-                // Clean up any in-progress path measurements
-                cancelPathMeasurement();
+                // Path measurements remain visible when exiting path measure mode
+                // No cleanup is performed here
             }
         }
 
@@ -2223,6 +2230,76 @@
             
             // Update the measurements list
             updateMeasurementsList();
+        }
+
+        // New function to cancel only the in-progress path measurement
+        function cancelInProgressPathMeasurement() {
+            // If we haven't started a new path or only have one point, completely cancel
+            if (pathMeasurementPoints.length <= 1) {
+                // This is effectively a new path, so cancel everything
+                cancelPathMeasurement();
+                return;
+            }
+            
+            // Get the current measurement list state before removing the last point
+            const currentPathTotal = pathTotalDistance;
+            
+            // If we have multiple points, just remove the last one (in-progress point)
+            if (pathMeasurementPoints.length > 0) {
+                // Remove the last point
+                const lastPoint = pathMeasurementPoints.pop();
+                
+                // Remove the corresponding label
+                if (pathMeasurementLabels.length > 0) {
+                    const lastLabel = pathMeasurementLabels.pop();
+                    // Find and remove the label from the scene
+                    for (let i = 0; i < measurementGroup.children.length; i++) {
+                        if (measurementGroup.children[i] === lastLabel) {
+                            measurementGroup.remove(lastLabel);
+                            break;
+                        }
+                    }
+                }
+                
+                // If we have at least one point left, we need to remove the last line segment too
+                if (pathMeasurementPoints.length > 0) {
+                    // Remove the last two line segments (white line and green dotted line)
+                    if (pathMeasurementLines.length >= 2) {
+                        const lastLine1 = pathMeasurementLines.pop();
+                        const lastLine2 = pathMeasurementLines.pop();
+                        measurementGroup.remove(lastLine1);
+                        measurementGroup.remove(lastLine2);
+                        
+                        // Recalculate the total distance by removing the last segment
+                        if (pathMeasurementPoints.length > 1) {
+                            // Get the previous point
+                            const prevPoint = pathMeasurementPoints[pathMeasurementPoints.length - 1];
+                            const distance = prevPoint.distanceTo(lastPoint);
+                            pathTotalDistance -= distance;
+                            
+                            // Update the total label
+                            updatePathTotalLabel();
+                        }
+                    }
+                } else {
+                    // If we removed the last point, reset total distance
+                    pathTotalDistance = 0;
+                    
+                    // Remove the total label
+                    if (pathTotalLabel) {
+                        measurementGroup.remove(pathTotalLabel);
+                        pathTotalLabel = null;
+                    }
+                }
+                
+                // Remove the preview marker
+                removePathPreviewMarker();
+                
+                // Update the measurements list
+                updateMeasurementsList();
+                
+                console.log("Cancelled in-progress path point. Remaining points:", pathMeasurementPoints.length);
+            }
         }
 
         // Function to update the preview marker for path measurement
