@@ -45,7 +45,7 @@
             border-radius: 4px;
             cursor: pointer;
             transition: background 0.3s;
-            font-size: 14px;
+            font-size: 24px;
         }
         .controls-overlay button:hover {
             background: #45a049;
@@ -70,20 +70,21 @@
         .view-buttons {
             display: flex;
             flex-wrap: wrap;
-            gap: 5px;
-            margin-top: 6px;
-            margin-bottom: 6px;
+            gap: 8px;
+            margin-top: 10px;
+            margin-bottom: 10px;
         }
         .view-buttons button {
-            flex: 0 0 calc(33% - 5px);
+            flex: 0 0 calc(33% - 6px);
             margin: 0;
-            padding: 5px;
-            font-size: 12px;
+            padding: 10px 5px;
+            font-size: 24px;
         }
         .view-buttons button.camera-mode {
             flex: 0 0 100%;
-            margin-top: 5px;
+            margin-top: 8px;
             font-weight: bold;
+            padding: 12px 5px;
         }
         .control-mode-label {
             display: block;
@@ -179,6 +180,40 @@
             font-weight: bold;
             text-shadow: 1px 1px 1px rgba(0,0,0,0.5);
         }
+        
+        /* Combined marker style - number is part of the marker */
+        .path-marker-label {
+            color: white;
+            background-color: rgba(255, 140, 0, 0.9);
+            padding: 4px 6px;
+            border-radius: 50%;
+            font-size: 10px;
+            pointer-events: none;
+            font-weight: bold;
+            text-shadow: 1px 1px 1px rgba(0,0,0,0.5);
+            border: 1px solid rgba(255, 255, 255, 0.7);
+            box-shadow: 0 1px 3px rgba(0,0,0,0.5);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        
+        /* Preview marker style */
+        .path-preview-marker {
+            color: white;
+            background-color: rgba(100, 200, 255, 0.8);
+            padding: 4px 6px;
+            border-radius: 50%;
+            font-size: 10px;
+            pointer-events: none;
+            font-weight: bold;
+            text-shadow: 1px 1px 1px rgba(0,0,0,0.5);
+            border: 1px dashed rgba(255, 255, 255, 0.7);
+            box-shadow: 0 1px 3px rgba(0,0,0,0.5);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
         .path-total-label {
             color: white;
             background-color: rgba(255, 69, 0, 0.8);
@@ -232,11 +267,11 @@
             
             .controls-overlay button,
             .view-buttons button {
-                width: 40px;
-                height: 40px;
+                width: 50px;
+                height: 50px;
                 border-radius: 50%;
                 padding: 0;
-                margin: 4px 0;
+                margin: 5px 0;
                 display: flex;
                 align-items: center;
                 justify-content: center;
@@ -245,15 +280,15 @@
             }
 
             .view-buttons button.camera-mode {
-                width: 40px;
-                flex: 0 0 40px;
-                margin: 4px 0;
+                width: 50px;
+                flex: 0 0 50px;
+                margin: 5px 0;
             }
             
             /* Icons for buttons */
             .btn-icon::before {
                 font-family: Arial, sans-serif;
-                font-size: 20px;
+                font-size: 24px;
                 display: block;
             }
             
@@ -462,22 +497,22 @@
         <div class="button-group">
             <h3>View Controls</h3>
             <div class="view-buttons">
-                <button id="viewFront" class="btn-icon">Front<span class="tooltip-text">Front View</span></button>
-                <button id="viewBack" class="btn-icon">Back<span class="tooltip-text">Back View</span></button>
-                <button id="viewLeft" class="btn-icon">Left<span class="tooltip-text">Left View</span></button>
-                <button id="viewRight" class="btn-icon">Right<span class="tooltip-text">Right View</span></button>
-                <button id="viewTop" class="btn-icon">Top<span class="tooltip-text">Top View</span></button>
-                <button id="viewBottom" class="btn-icon">Bottom<span class="tooltip-text">Bottom View</span></button>
-                <button id="toggleCameraMode" class="camera-mode btn-icon">Perspective<span class="tooltip-text">Camera Mode</span></button>
-                <button id="toggleViewMode" class="camera-mode btn-icon">View Mode: Transparent<span class="tooltip-text">View Mode</span></button>
+                <button id="viewFront" class="btn-icon"><span class="tooltip-text">Front</span></button>
+                <button id="viewBack" class="btn-icon"><span class="tooltip-text">Back</span></button>
+                <button id="viewLeft" class="btn-icon"><span class="tooltip-text">Left</span></button>
+                <button id="viewRight" class="btn-icon"><span class="tooltip-text">Right</span></button>
+                <button id="viewTop" class="btn-icon"><span class="tooltip-text">Top</span></button>
+                <button id="viewBottom" class="btn-icon"><span class="tooltip-text">Bottom</span></button>
+                <button id="toggleCameraMode" class="camera-mode btn-icon">Perspective<span class="tooltip-text">Camera</span></button>
+                <button id="toggleViewMode" class="camera-mode btn-icon">Transparent<span class="tooltip-text">View</span></button>
             </div>
         </div>
         
         <div class="button-group measurements-group">
             <h3>Measurement</h3>
-            <button id="measureMode" class="btn-icon">Measure<span class="tooltip-text">Measure</span></button>
-            <button id="clearMeasurements" class="btn-icon">Clear<span class="tooltip-text">Clear Measures</span></button>
-            <button id="pathMeasureMode" class="btn-icon">Path Measure<span class="tooltip-text">Measure Along Path</span></button>
+            <button id="measureMode" class="btn-icon"><span class="tooltip-text">Measure</span></button>
+            <button id="clearMeasurements" class="btn-icon"><span class="tooltip-text">Clear</span></button>
+            <button id="pathMeasureMode" class="btn-icon"><span class="tooltip-text">Path</span></button>
         </div>
         
         <!-- Info button for mobile -->
@@ -582,6 +617,7 @@
         let pathTotalDistance = 0;
         let pathTotalLabel = null;
         let isRotationKeyPressed = false; // Flag to track if rotation key is pressed
+        let pathPreviewMarker = null; // Preview marker for potential intersection point
         
         // Set up both cameras: perspective and orthographic
         const perspectiveCamera = new THREE.PerspectiveCamera(75, window.innerWidth/window.innerHeight, 0.1, 1000);
@@ -798,46 +834,31 @@
 
             // For path measurement, we always want to intersect with the model if possible
             if (isPathMeasureMode && currentMesh) {
-                // Try to intersect directly with the mesh first
+                // Ensure the mesh's matrix is up to date
+                currentMesh.updateMatrixWorld(true);
+                
+                // Cast ray against the entire mesh hierarchy
                 const meshIntersects = raycaster.intersectObject(currentMesh, true);
                 
                 if (meshIntersects.length > 0) {
-                    // We got a direct hit on the mesh
-                    intersectionPoint = meshIntersects[0].point.clone();
-                    console.log("Direct mesh hit at:", intersectionPoint);
+                    // We got a direct hit on the mesh - use the closest hit point
+                    const closestHit = meshIntersects[0];
+                    intersectionPoint = closestHit.point.clone();
                     
-                    // Adjust point position for any model transformations
-                    const modelWorldMatrix = new THREE.Matrix4();
-                    currentMesh.updateMatrixWorld(true);
-                    currentMesh.getWorldPosition(new THREE.Vector3()); // Force matrix update
+                    // Debug log
+                    console.log("Direct mesh hit at:", intersectionPoint, "on object:", closestHit.object.name || "unnamed");
                     
+                    // Remove the preview marker after placing a point
+                    removePathPreviewMarker();
+                    
+                    // Add the point directly - the point is already in world coordinates
                     addPathMeasurementPoint(intersectionPoint);
                     return;
                 }
                 
-                // If direct intersection failed, try all scene objects
-                const sceneIntersects = raycaster.intersectObjects(scene.children, true);
-                
-                // Filter for valid mesh-related intersections
-                const validIntersections = sceneIntersects.filter(hit => {
-                    // Check if the hit object is the mesh, part of it, or a child
-                    let current = hit.object;
-                    while (current) {
-                        if (current === currentMesh) return true;
-                        current = current.parent;
-                    }
-                    return false;
-                });
-                
-                if (validIntersections.length > 0) {
-                    intersectionPoint = validIntersections[0].point.clone();
-                    console.log("Scene hit on:", validIntersections[0].object.name || "unnamed object");
-                    addPathMeasurementPoint(intersectionPoint);
-                    return;
-                } else {
-                    console.log("No valid intersection found with mesh or its children");
-                    return; // Don't add a point if we didn't hit the mesh
-                }
+                // If direct intersection failed, we don't want to add a point
+                console.log("No valid intersection found with mesh");
+                return;
             }
             
             // Existing regular measurement mode logic
@@ -901,7 +922,13 @@
         }
         
         function onPointerMove(event) {
-            if (!isMeasureMode || measurementPoints.length === 0) return;
+            if (!isMeasureMode && !isPathMeasureMode) return;
+            
+            // Skip preview marker if rotation key is pressed in path measure mode
+            if (isPathMeasureMode && isRotationKeyPressed) {
+                removePathPreviewMarker();
+                return;
+            }
             
             // Calculate mouse position in normalized device coordinates
             mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
@@ -910,50 +937,86 @@
             // Update the picking ray
             raycaster.setFromCamera(mouse, camera);
             
-            let intersectionPoint = null;
-            
-            // Same intersection logic as in onPointerDown
-            if (isOrthographic) {
-                const ray = raycaster.ray;
-                const sceneCenter = modelCenter ? modelCenter.clone() : new THREE.Vector3(0, 0, 0);
-                const planeNormal = new THREE.Vector3().copy(camera.getWorldDirection(new THREE.Vector3()));
-                const plane = new THREE.Plane().setFromNormalAndCoplanarPoint(planeNormal, sceneCenter);
+            // For regular measurement mode - show preview line
+            if (isMeasureMode && measurementPoints.length === 1) {
+                let intersectionPoint = null;
                 
-                intersectionPoint = new THREE.Vector3();
-                ray.intersectPlane(plane, intersectionPoint);
-                
-                if (!intersectionPoint) {
+                // Same intersection logic as in onPointerDown
+                if (isOrthographic) {
+                    const ray = raycaster.ray;
+                    const sceneCenter = modelCenter ? modelCenter.clone() : new THREE.Vector3(0, 0, 0);
+                    const planeNormal = new THREE.Vector3().copy(camera.getWorldDirection(new THREE.Vector3()));
+                    const plane = new THREE.Plane().setFromNormalAndCoplanarPoint(planeNormal, sceneCenter);
+                    
+                    intersectionPoint = new THREE.Vector3();
+                    ray.intersectPlane(plane, intersectionPoint);
+                    
+                    if (!intersectionPoint) {
+                        if (currentMesh) {
+                            const modelIntersects = raycaster.intersectObject(currentMesh, true);
+                            if (modelIntersects.length > 0) {
+                                intersectionPoint = modelIntersects[0].point.clone();
+                            }
+                        }
+                        
+                        if (!intersectionPoint) {
+                            intersectionPoint = new THREE.Vector3();
+                            intersectionPoint.copy(ray.origin);
+                            intersectionPoint.addScaledVector(ray.direction, 10);
+                        }
+                    }
+                } else {
                     if (currentMesh) {
-                        const modelIntersects = raycaster.intersectObject(currentMesh, true);
-                        if (modelIntersects.length > 0) {
-                            intersectionPoint = modelIntersects[0].point.clone();
+                        const intersects = raycaster.intersectObject(currentMesh, true);
+                        if (intersects.length > 0) {
+                            intersectionPoint = intersects[0].point.clone();
                         }
                     }
                     
                     if (!intersectionPoint) {
+                        const ray = raycaster.ray;
                         intersectionPoint = new THREE.Vector3();
                         intersectionPoint.copy(ray.origin);
                         intersectionPoint.addScaledVector(ray.direction, 10);
                     }
                 }
-            } else {
-                if (currentMesh) {
-                    const intersects = raycaster.intersectObject(currentMesh, true);
-                    if (intersects.length > 0) {
-                        intersectionPoint = intersects[0].point.clone();
-                    }
-                }
                 
-                if (!intersectionPoint) {
-                    const ray = raycaster.ray;
-                    intersectionPoint = new THREE.Vector3();
-                    intersectionPoint.copy(ray.origin);
-                    intersectionPoint.addScaledVector(ray.direction, 10);
-                }
+                // Update preview line
+                updatePreviewLine(measurementPoints[0], intersectionPoint);
             }
             
-            // Update preview line
-            updatePreviewLine(measurementPoints[0], intersectionPoint);
+            // For path measurement mode - show preview marker at potential intersection point
+            if (isPathMeasureMode && currentMesh) {
+                // Ensure the mesh's world matrix is updated for accurate raycasting
+                if (currentMesh.matrixAutoUpdate) {
+                    currentMesh.updateMatrix();
+                }
+                currentMesh.updateMatrixWorld(true);
+                
+                // Set a lower precision threshold for raycasting
+                raycaster.params.Line.threshold = 0.05;
+                raycaster.params.Points.threshold = 0.05;
+                
+                // Cast ray against the entire mesh hierarchy
+                const meshIntersects = raycaster.intersectObject(currentMesh, true);
+                
+                if (meshIntersects.length > 0) {
+                    // We got a direct hit on the mesh - create/update preview marker
+                    const intersectionPoint = meshIntersects[0].point.clone();
+                    
+                    // Store the exact mouse coordinates for this position
+                    const screenX = event.clientX;
+                    const screenY = event.clientY;
+                    
+                    // Debug the intersection
+                    // console.log("Preview at:", intersectionPoint, "Mouse:", screenX, screenY);
+                    
+                    updatePathPreviewMarker(intersectionPoint, screenX, screenY);
+                } else {
+                    // No valid intersection - remove preview marker
+                    removePathPreviewMarker();
+                }
+            }
         }
         
         function updatePreviewLine(point1, point2) {
@@ -968,16 +1031,36 @@
                 previewLabel = null;
             }
             
-            // Create a more visible preview line between points
+            // Create a white dashed preview line
             const material = new THREE.LineDashedMaterial({ 
-                color: 0x3498db, // Light blue for preview
-                dashSize: 0.12, 
-                gapSize: 0.06,
-                linewidth: 2
+                color: 0xFFFFFF, // White
+                dashSize: 0.2, 
+                gapSize: 0.1,
+                linewidth: 3,
+                transparent: true,
+                opacity: 0.9 // Very minimal transparency
             });
             const geometry = new THREE.BufferGeometry().setFromPoints([point1, point2]);
             previewLine = new THREE.Line(geometry, material);
             previewLine.computeLineDistances(); // Required for dashed lines
+            
+            // Create a green background line with different dash pattern
+            const backgroundMaterial = new THREE.LineDashedMaterial({
+                color: 0x00CC00, // Bright green
+                linewidth: 4,
+                transparent: true,
+                opacity: 0.95, // Very minimal transparency
+                dashSize: 0.05, // Short dashes
+                gapSize: 0.15  // Longer gaps
+            });
+            const bgGeometry = new THREE.BufferGeometry().setFromPoints([point1, point2]);
+            const backgroundLine = new THREE.Line(bgGeometry, backgroundMaterial);
+            backgroundLine.computeLineDistances(); // Required for dashed lines
+            
+            // Add the green background line first
+            measurementGroup.add(backgroundLine);
+            
+            // Add the white dashed line on top
             measurementGroup.add(previewLine);
             
             // Calculate distance for preview
@@ -1122,26 +1205,29 @@
         }
         
         function createMeasurement(point1, point2) {
-            // Create a more prominent line between points with dual colors
-            const primaryColor = 0x4caf50; // Light green (replacing red)
-            const secondaryColor = 0x3498db; // Light blue
+            // Create a more prominent line between points with white and green
+            const primaryColor = 0xFFFFFF; // White
+            const secondaryColor = 0x00CC00; // Bright green
             
-            // Create primary measurement line (light green)
+            // Create primary measurement line (white)
             const primaryMaterial = new THREE.LineBasicMaterial({ 
                 color: primaryColor, 
-                linewidth: 3 
+                linewidth: 4,
+                transparent: false // No transparency
             });
             const geometry = new THREE.BufferGeometry().setFromPoints([point1, point2]);
             const line = new THREE.Line(geometry, primaryMaterial);
             measurementGroup.add(line);
             
-            // Create secondary line (light blue) with slight offset for visibility
+            // Create secondary line (green) with slight offset and dashed pattern
             const offset = new THREE.Vector3(0.01, 0.01, 0.01);
-            const secondaryMaterial = new THREE.LineBasicMaterial({ 
+            const secondaryMaterial = new THREE.LineDashedMaterial({ 
                 color: secondaryColor, 
-                linewidth: 2,
+                linewidth: 3,
                 transparent: true,
-                opacity: 0.8
+                opacity: 0.95, // Very little transparency
+                dashSize: 0.15,
+                gapSize: 0.05
             });
             
             // Create slightly offset points for the secondary line
@@ -1150,6 +1236,7 @@
             
             const secondaryGeometry = new THREE.BufferGeometry().setFromPoints([offsetPoint1, offsetPoint2]);
             const secondaryLine = new THREE.Line(secondaryGeometry, secondaryMaterial);
+            secondaryLine.computeLineDistances(); // Required for dashed lines
             measurementGroup.add(secondaryLine);
             
             // Calculate distance (model units)
@@ -1347,10 +1434,10 @@
             
             if (isMeasureMode) {
                 controls.enableRotate = false;
-                measureButton.textContent = `Exit Measure Mode`;
+                measureButton.textContent = `Exit`;
             } else {
                 controls.enableRotate = true;
-                measureButton.textContent = 'Measure';
+                measureButton.textContent = '';
                 
                 // Clean up any in-progress measurements
                 measurementPoints = [];
@@ -1438,21 +1525,21 @@
                     currentMesh.material.wireframe = false;
                     currentMesh.material.transparent = true;
                     currentMesh.material.opacity = 0.95;
-                    modeButton.textContent = "View Mode: Solid";
+                    modeButton.textContent = "Solid";
                     break;
                     
                 case 1: // Transparent
                     currentMesh.material.wireframe = false;
                     currentMesh.material.transparent = true;
                     currentMesh.material.opacity = 0.5;
-                    modeButton.textContent = "View Mode: Transparent";
+                    modeButton.textContent = "Transparent";
                     break;
                     
                 case 2: // Wireframe
                     currentMesh.material.wireframe = true;
                     currentMesh.material.transparent = true;
                     currentMesh.material.opacity = 0.7;
-                    modeButton.textContent = "View Mode: Wireframe";
+                    modeButton.textContent = "Wireframe";
                     break;
             }
         }
@@ -1519,7 +1606,9 @@
                 mesh.geometry.computeTangents();
             }
             
+            // Ensure matrix updates are always performed
             mesh.matrixAutoUpdate = true;
+            mesh.updateMatrix();
             mesh.updateMatrixWorld(true);
             
             // Center the model
@@ -1656,6 +1745,8 @@
         function animate() {
             requestAnimationFrame(animate);
             controls.update();
+            
+            // Ensure label renderer stays in sync with objects
             renderer.render(scene, camera);
             labelRenderer.render(scene, camera);
         }
@@ -1934,6 +2025,9 @@
             const pathMeasureButton = document.getElementById('pathMeasureMode');
             pathMeasureButton.classList.toggle('active', isPathMeasureMode);
             
+            // Remove any preview marker when toggling mode
+            removePathPreviewMarker();
+            
             // Update mobile floating action button if on mobile
             if (isMobile) {
                 document.getElementById('mobilePathMeasure').classList.toggle('path-measure-mobile-active', isPathMeasureMode);
@@ -1944,7 +2038,7 @@
             
             if (isPathMeasureMode) {
                 controls.enableRotate = true; // Allow rotation in path measure mode
-                pathMeasureButton.textContent = `Exit Path Measure`;
+                pathMeasureButton.textContent = `Exit`;
                 
                 // Create a small notification to instruct the user
                 const notification = document.createElement('div');
@@ -1971,7 +2065,7 @@
                     }
                 }, 3000);
             } else {
-                pathMeasureButton.textContent = 'Path Measure';
+                pathMeasureButton.textContent = '';
                 
                 // Clean up any in-progress path measurements
                 cancelPathMeasurement();
@@ -1982,41 +2076,22 @@
             if (!isPathMeasureMode) return;
             
             // Add a marker at the clicked point
-            const markerGroup = new THREE.Group();
-            markerGroup.position.copy(point);
+            const pointIndex = pathMeasurementPoints.length + 1;
             
-            // Create a more visible marker
-            // Create a small sphere as a marker - using smaller size
-            const sphereGeometry = new THREE.SphereGeometry(0.03);  // Reduced from 0.05
-            const sphereMaterial = new THREE.MeshBasicMaterial({ 
-                color: 0xFF6600, 
-                transparent: true,
-                opacity: 0.8
-            });
-            const sphere = new THREE.Mesh(sphereGeometry, sphereMaterial);
-            markerGroup.add(sphere);
-            
-            // Add a wireframe sphere for better visibility from any angle - also smaller
-            const wireframeGeometry = new THREE.SphereGeometry(0.035); // Reduced from 0.06
-            const wireframeMaterial = new THREE.MeshBasicMaterial({
-                color: 0x000000,
-                wireframe: true,
-                transparent: true,
-                opacity: 0.5
-            });
-            const wireframeSphere = new THREE.Mesh(wireframeGeometry, wireframeMaterial);
-            markerGroup.add(wireframeSphere);
-            
-            // Add a number label to the point
+            // Create the label div which will be our visible marker
             const labelDiv = document.createElement('div');
-            labelDiv.className = 'path-point-indicator';
-            labelDiv.textContent = pathMeasurementPoints.length + 1;
-            const label = new CSS2DObject(labelDiv);
-            label.position.set(0, 0.15, 0); // Position slightly above the point
-            markerGroup.add(label);
+            labelDiv.className = 'path-marker-label';
+            labelDiv.textContent = pointIndex;
+            const markerLabel = new CSS2DObject(labelDiv);
             
-            measurementGroup.add(markerGroup);
-            pathMeasurementLabels.push(label);
+            // Position directly at the point location and force update
+            markerLabel.position.copy(point);
+            markerLabel.updateMatrix();
+            markerLabel.updateMatrixWorld(true);
+            
+            // Add directly to scene instead of using a mesh sphere
+            measurementGroup.add(markerLabel);
+            pathMeasurementLabels.push(markerLabel);
             
             // Add the point to our array
             pathMeasurementPoints.push(point);
@@ -2026,27 +2101,35 @@
                 const prevPoint = pathMeasurementPoints[pathMeasurementPoints.length - 2];
                 const currentPoint = point;
                 
-                // Create a line between the points
+                // Create a white line between the points
                 const lineMaterial = new THREE.LineBasicMaterial({ 
-                    color: 0xFF6600, 
-                    linewidth: 3 
+                    color: 0xFFFFFF, // White
+                    linewidth: 4, 
+                    transparent: false // No transparency
                 });
                 const geometry = new THREE.BufferGeometry().setFromPoints([prevPoint, currentPoint]);
                 const line = new THREE.Line(geometry, lineMaterial);
+                
+                // Create a green dotted line for contrast
+                const dottedLineMaterial = new THREE.LineDashedMaterial({ 
+                    color: 0x00CC00, // Bright green
+                    linewidth: 3, 
+                    transparent: true,
+                    opacity: 0.95, // Very little transparency
+                    dashSize: 0.05, // Small dashes for a dotted effect
+                    gapSize: 0.05
+                });
+                const dottedGeometry = new THREE.BufferGeometry().setFromPoints([prevPoint, currentPoint]);
+                const dottedLine = new THREE.Line(dottedGeometry, dottedLineMaterial);
+                dottedLine.computeLineDistances(); // Required for dashed lines
+                
+                // Add the green dotted line first (below) for proper layering
+                measurementGroup.add(dottedLine);
+                pathMeasurementLines.push(dottedLine);
+                
+                // Add the white line on top
                 measurementGroup.add(line);
                 pathMeasurementLines.push(line);
-                
-                // Create a slightly thicker line for better visibility
-                const thickLineMaterial = new THREE.LineBasicMaterial({ 
-                    color: 0x000000, 
-                    linewidth: 5,
-                    transparent: true,
-                    opacity: 0.3
-                });
-                const thickGeometry = new THREE.BufferGeometry().setFromPoints([prevPoint, currentPoint]);
-                const thickLine = new THREE.Line(thickGeometry, thickLineMaterial);
-                measurementGroup.add(thickLine);
-                pathMeasurementLines.push(thickLine);
                 
                 // Calculate the distance between these two points
                 const segmentDistance = prevPoint.distanceTo(currentPoint);
@@ -2057,6 +2140,9 @@
                 
                 // Update the measurements list
                 updateMeasurementsList();
+                
+                // Force label renderer update to ensure correct positioning
+                labelRenderer.render(scene, camera);
             }
         }
 
@@ -2139,6 +2225,37 @@
             updateMeasurementsList();
         }
 
+        // Function to update the preview marker for path measurement
+        function updatePathPreviewMarker(position, screenX, screenY) {
+            // Remove existing preview marker if it exists
+            removePathPreviewMarker();
+            
+            // Create a new preview marker
+            const labelDiv = document.createElement('div');
+            labelDiv.className = 'path-preview-marker';
+            labelDiv.textContent = '•';
+            
+            // Create the CSS2D object
+            pathPreviewMarker = new CSS2DObject(labelDiv);
+            
+            // Position it at the intersection point in 3D space
+            pathPreviewMarker.position.copy(position);
+            
+            // Add to the measurement group
+            measurementGroup.add(pathPreviewMarker);
+            
+            // Force an update of the label renderer to ensure correct positioning
+            labelRenderer.render(scene, camera);
+        }
+        
+        // Function to remove the preview marker
+        function removePathPreviewMarker() {
+            if (pathPreviewMarker) {
+                measurementGroup.remove(pathPreviewMarker);
+                pathPreviewMarker = null;
+            }
+        }
+
         // Debug function to visualize the ray being cast
         function visualizeRay(ray) {
             // Remove existing visualization
@@ -2148,7 +2265,7 @@
             }
             
             // Create line from ray origin extending in ray direction
-            const rayLength = 1000;
+            const rayLength = 200; // Extend the ray farther
             const endPoint = new THREE.Vector3().copy(ray.origin).addScaledVector(ray.direction, rayLength);
             const geometry = new THREE.BufferGeometry().setFromPoints([ray.origin, endPoint]);
             
