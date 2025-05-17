@@ -5,7 +5,7 @@
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>3D Model Viewer</title>
+    <title>3D Model Viewer (DEV VERSION)</title>
     <style>
         body { margin: 0; overflow: hidden; }
         canvas { display: block; }
@@ -148,6 +148,15 @@
         #annotations li {
             margin-bottom: 5px;
         }
+        #annotations li.path-measurement {
+            color: #FF6600;
+            font-weight: bold;
+        }
+        #annotations li.path-segment {
+            color: #FF6600;
+            margin-left: 15px;
+            font-size: 0.9em;
+        }
         .annotation-label {
             color: white;
             background-color: rgba(0, 0, 0, 0.7);
@@ -157,6 +166,29 @@
             pointer-events: none;
             font-weight: bold;
             text-shadow: 1px 1px 1px rgba(0,0,0,0.5);
+        }
+        
+        /* Path measurement styles */
+        .path-point-indicator {
+            color: white;
+            background-color: rgba(255, 165, 0, 0.8);
+            padding: 4px 6px;
+            border-radius: 50%;
+            font-size: 10px;
+            pointer-events: none;
+            font-weight: bold;
+            text-shadow: 1px 1px 1px rgba(0,0,0,0.5);
+        }
+        .path-total-label {
+            color: white;
+            background-color: rgba(255, 69, 0, 0.8);
+            padding: 6px 8px;
+            border-radius: 4px;
+            font-size: 14px;
+            pointer-events: none;
+            font-weight: bold;
+            text-shadow: 1px 1px 1px rgba(0,0,0,0.5);
+            border: 2px solid white;
         }
         
         /* Mobile optimizations */
@@ -322,6 +354,20 @@
                 background: #ff4444;
             }
             
+            /* Dev indicator */
+            .dev-indicator {
+                top: 10px !important;
+                left: 10px !important;
+                padding: 6px 12px !important;
+                font-size: 14px !important;
+            }
+            
+            /* Loading indicator */
+            #loading {
+                font-size: 22px;
+                padding: 25px;
+            }
+            
             /* Annotations panel on mobile */
             #annotations {
                 left: 80px;
@@ -346,6 +392,11 @@
                 color: white;
             }
             
+            /* Explicitly hide keyboard shortcuts on mobile */
+            .keyboard-shortcuts {
+                display: none !important;
+            }
+            
             /* Larger clear measurements button for mobile */
             #clearMeasurements {
                 width: 48px;
@@ -358,19 +409,33 @@
                 font-size: 24px;
             }
 
-            /* Hide the redundant measure button in toolbar since we have the FAB */
-            #measureMode {
-                display: none;
-            }
-            
             /* Hide the entire measurements button group on mobile */
             .button-group.measurements-group {
                 display: none;
             }
+
+            /* Floating action buttons for mobile path measure */
+            .mobile-path-fab {
+                position: fixed;
+                bottom: 20px;
+                left: 20px;
+                width: 60px;
+                height: 60px;
+                border-radius: 50%;
+                background: #FF6600;
+                color: white;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                font-size: 24px;
+                box-shadow: 0 4px 8px rgba(0,0,0,0.3);
+                z-index: 200;
+                display: none; /* Hidden by default */
+            }
             
-            /* Explicitly hide keyboard shortcuts on mobile */
-            .keyboard-shortcuts {
-                display: none !important;
+            /* Special controls for path measure mode on mobile */
+            .path-measure-mobile-active .mobile-path-fab {
+                background: #FF4500;
             }
         }
     </style>
@@ -379,9 +444,18 @@
     <canvas id="viewer"></canvas>
     <div id="loading">Loading 3D model...</div>
     
+    <div style="position: absolute; top: 10px; left: 10px; background-color: #ff4444; color: white; padding: 5px 10px; border-radius: 5px; font-weight: bold; font-family: Arial, sans-serif; z-index: 1000;" class="dev-indicator">
+        DEV VERSION
+    </div>
+    
     <!-- Mobile floating action button (only shows on mobile) -->
     <div class="mobile-fab" id="mobileMeasure" style="display: none;">
         <span>📏</span>
+    </div>
+    
+    <!-- Mobile floating action button for path measure (only shows on mobile) -->
+    <div class="mobile-path-fab" id="mobilePathMeasure" style="display: none;">
+        <span>📍</span>
     </div>
     
     <div class="controls-overlay">
@@ -403,6 +477,7 @@
             <h3>Measurement</h3>
             <button id="measureMode" class="btn-icon">Measure<span class="tooltip-text">Measure</span></button>
             <button id="clearMeasurements" class="btn-icon">Clear<span class="tooltip-text">Clear Measures</span></button>
+            <button id="pathMeasureMode" class="btn-icon">Path Measure<span class="tooltip-text">Measure Along Path</span></button>
         </div>
         
         <!-- Info button for mobile -->
@@ -423,11 +498,13 @@
             <li>C - Clear Measurements</li>
             <li>P - Toggle Camera Mode</li>
             <li>V - Toggle View Mode</li>
-            <li>2-6 - Orthographic Views</li>
+            <li>A - Toggle Path Measure Mode</li>
+            <li>Space - Hold to rotate without adding points</li>
             <li>Escape - Cancel Current Measurement</li>
             <li>Left-drag - Rotate</li>
             <li>Middle-drag - Pan</li>
             <li>Scroll - Zoom</li>
+            <li>Click - Place measurement point</li>
         </ul>
     </div>
 
@@ -495,6 +572,16 @@
         
         // Control states
         let isOrthographic = false;
+        
+        // Measurement control states
+        let isMeasureMode = false;
+        let isPathMeasureMode = false;
+        let pathMeasurementPoints = [];
+        let pathMeasurementLines = [];
+        let pathMeasurementLabels = [];
+        let pathTotalDistance = 0;
+        let pathTotalLabel = null;
+        let isRotationKeyPressed = false; // Flag to track if rotation key is pressed
         
         // Set up both cameras: perspective and orthographic
         const perspectiveCamera = new THREE.PerspectiveCamera(75, window.innerWidth/window.innerHeight, 0.1, 1000);
@@ -605,7 +692,6 @@
         let currentMesh = null;
         let isWireframe = false;
         let isAxesVisible = true;
-        let isMeasureMode = false;
         let viewMode = 1; // 0: solid, 1: transparent, 2: wireframe - default to transparent
         
         // Measurement variables
@@ -616,58 +702,19 @@
         let previewLine = null; // For showing line before second point is clicked
         let previewLabel = null; // For showing distance before second point is clicked
         const raycaster = new THREE.Raycaster();
+        raycaster.params.Line.threshold = 0.1; // Increase line detection threshold
+        raycaster.params.Points.threshold = 0.1; // Increase point detection threshold
         const mouse = new THREE.Vector2();
         const measurementGroup = new THREE.Group();
         scene.add(measurementGroup);
 
+        // Debug visualization for raycaster
+        let rayVisualization = null;
+
         document.getElementById('measureMode').addEventListener('click', toggleMeasureMode);
         document.getElementById('clearMeasurements').addEventListener('click', clearMeasurements);
         document.getElementById('toggleViewMode').addEventListener('click', toggleViewMode);
-        
-        // Mobile-specific event handlers
-        if (isMobile) {
-            document.getElementById('mobileMeasure').addEventListener('click', toggleMeasureMode);
-            
-            // Use the floating action button as the primary measure button on mobile
-            const mobileMeasureBtn = document.getElementById('mobileMeasure');
-            mobileMeasureBtn.style.display = 'flex';
-            
-            // Add a double-tap functionality to the measure FAB for clearing measurements
-            let lastTapTime = 0;
-            mobileMeasureBtn.addEventListener('click', function(e) {
-                const currentTime = new Date().getTime();
-                const tapLength = currentTime - lastTapTime;
-                
-                if (tapLength < 500 && tapLength > 0) {
-                    // Double tap detected - clear measurements
-                    clearMeasurements();
-                    e.preventDefault();
-                }
-                
-                lastTapTime = currentTime;
-            });
-            
-            // Show active state on the FAB when in measure mode
-            if (isMeasureMode) {
-                mobileMeasureBtn.classList.add('measure-mobile-active');
-            }
-            
-            // Add tap to show/hide annotations on mobile
-            document.addEventListener('click', function(e) {
-                // If we're in measure mode, keep annotations visible
-                if (isMeasureMode) {
-                    document.getElementById('annotations').style.display = 'block';
-                } else {
-                    // Toggle annotations based on tap position - if not tapping a control
-                    if (!e.target.closest('.controls-overlay') && 
-                        !e.target.closest('#annotations') && 
-                        !e.target.closest('.mobile-fab')) {
-                        const annotations = document.getElementById('annotations');
-                        annotations.style.display = annotations.style.display === 'none' ? 'block' : 'none';
-                    }
-                }
-            });
-        }
+        document.getElementById('pathMeasureMode').addEventListener('click', togglePathMeasureMode);
 
         // Enhanced keyboard controls
         document.addEventListener('keydown', (event) => {
@@ -684,6 +731,9 @@
                 case 'v':
                     toggleViewMode();
                     break;
+                case 'a':
+                    togglePathMeasureMode();
+                    break;
                 case '2':
                     setViewBack();
                     break;
@@ -699,9 +749,28 @@
                 case '6':
                     setViewBottom();
                     break;
-                case 'escape':
-                    cancelCurrentMeasurement();
+
+                case ' ': // Space key
+                    // Allow rotation without adding points when space is pressed
+                    isRotationKeyPressed = true;
+                    // Prevent page scrolling with space
+                    event.preventDefault();
                     break;
+                case 'escape':
+                    if (isPathMeasureMode && pathMeasurementPoints.length > 0) {
+                        cancelPathMeasurement();
+                    } else {
+                        cancelCurrentMeasurement();
+                    }
+                    break;
+            }
+        });
+
+        // Add keyup listener for rotation key
+        document.addEventListener('keyup', (event) => {
+
+            if (event.key === ' ') { // Space key
+                isRotationKeyPressed = false;
             }
         });
 
@@ -710,8 +779,11 @@
         renderer.domElement.addEventListener('pointermove', onPointerMove);
         
         function onPointerDown(event) {
-            if (!isMeasureMode) return;
+            if (!isMeasureMode && !isPathMeasureMode) return;
             
+            // Skip point placement if rotation key is pressed
+            if (isPathMeasureMode && isRotationKeyPressed) return;
+
             // Calculate mouse position in normalized device coordinates
             mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
             mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
@@ -719,63 +791,113 @@
             // Update the picking ray
             raycaster.setFromCamera(mouse, camera);
             
-            let intersectionPoint = null;
+            // Visualize the ray for debugging (remove in production)
+            visualizeRay(raycaster.ray);
             
-            // In orthographic mode, always place points on the orthographic plane
-            if (isOrthographic) {
-                // Get the ray from the raycaster
-                const ray = raycaster.ray;
+            let intersectionPoint = null;
+
+            // For path measurement, we always want to intersect with the model if possible
+            if (isPathMeasureMode && currentMesh) {
+                // Try to intersect directly with the mesh first
+                const meshIntersects = raycaster.intersectObject(currentMesh, true);
                 
-                // Find the center point of the scene
-                const sceneCenter = modelCenter ? modelCenter.clone() : new THREE.Vector3(0, 0, 0);
-                
-                // Project ray to the plane defined by sceneCenter and camera direction
-                const planeNormal = new THREE.Vector3().copy(camera.getWorldDirection(new THREE.Vector3()));
-                const plane = new THREE.Plane().setFromNormalAndCoplanarPoint(planeNormal, sceneCenter);
-                
-                // Find where the ray intersects this plane
-                intersectionPoint = new THREE.Vector3();
-                ray.intersectPlane(plane, intersectionPoint);
-                
-                // If for some reason we didn't get an intersection, fall back to model or default
-                if (!intersectionPoint) {
-                    // Try model intersection
-                    if (currentMesh) {
-                        const modelIntersects = raycaster.intersectObject(currentMesh);
-                        if (modelIntersects.length > 0) {
-                            intersectionPoint = modelIntersects[0].point.clone();
-                        }
-                    }
+                if (meshIntersects.length > 0) {
+                    // We got a direct hit on the mesh
+                    intersectionPoint = meshIntersects[0].point.clone();
+                    console.log("Direct mesh hit at:", intersectionPoint);
                     
-                    // If still no point, create one at a standard distance
-                    if (!intersectionPoint) {
-                        intersectionPoint = new THREE.Vector3();
-                        intersectionPoint.copy(ray.origin);
-                        intersectionPoint.addScaledVector(ray.direction, 10);
-                    }
-                }
-            } 
-            // In perspective mode, check for model intersection first, then fall back to ray
-            else {
-                // Try to find an intersection with the model first
-                if (currentMesh) {
-                    const intersects = raycaster.intersectObject(currentMesh);
-                    if (intersects.length > 0) {
-                        intersectionPoint = intersects[0].point.clone();
-                    }
+                    // Adjust point position for any model transformations
+                    const modelWorldMatrix = new THREE.Matrix4();
+                    currentMesh.updateMatrixWorld(true);
+                    currentMesh.getWorldPosition(new THREE.Vector3()); // Force matrix update
+                    
+                    addPathMeasurementPoint(intersectionPoint);
+                    return;
                 }
                 
-                // If no intersection, create a point in 3D space at a reasonable distance
-                if (!intersectionPoint) {
-                    const ray = raycaster.ray;
-                    intersectionPoint = new THREE.Vector3();
-                    intersectionPoint.copy(ray.origin);
-                    intersectionPoint.addScaledVector(ray.direction, 10); // Standard distance
+                // If direct intersection failed, try all scene objects
+                const sceneIntersects = raycaster.intersectObjects(scene.children, true);
+                
+                // Filter for valid mesh-related intersections
+                const validIntersections = sceneIntersects.filter(hit => {
+                    // Check if the hit object is the mesh, part of it, or a child
+                    let current = hit.object;
+                    while (current) {
+                        if (current === currentMesh) return true;
+                        current = current.parent;
+                    }
+                    return false;
+                });
+                
+                if (validIntersections.length > 0) {
+                    intersectionPoint = validIntersections[0].point.clone();
+                    console.log("Scene hit on:", validIntersections[0].object.name || "unnamed object");
+                    addPathMeasurementPoint(intersectionPoint);
+                    return;
+                } else {
+                    console.log("No valid intersection found with mesh or its children");
+                    return; // Don't add a point if we didn't hit the mesh
                 }
             }
             
-            // Add the measurement point
-            addMeasurementPoint(intersectionPoint);
+            // Existing regular measurement mode logic
+            if (isMeasureMode) {
+                // In orthographic mode, always place points on the orthographic plane
+                if (isOrthographic) {
+                    // Get the ray from the raycaster
+                    const ray = raycaster.ray;
+                    
+                    // Find the center point of the scene
+                    const sceneCenter = modelCenter ? modelCenter.clone() : new THREE.Vector3(0, 0, 0);
+                    
+                    // Project ray to the plane defined by sceneCenter and camera direction
+                    const planeNormal = new THREE.Vector3().copy(camera.getWorldDirection(new THREE.Vector3()));
+                    const plane = new THREE.Plane().setFromNormalAndCoplanarPoint(planeNormal, sceneCenter);
+                    
+                    // Find where the ray intersects this plane
+                    intersectionPoint = new THREE.Vector3();
+                    ray.intersectPlane(plane, intersectionPoint);
+                    
+                    // If for some reason we didn't get an intersection, fall back to model or default
+                    if (!intersectionPoint) {
+                        // Try model intersection
+                        if (currentMesh) {
+                            const modelIntersects = raycaster.intersectObject(currentMesh, true);
+                            if (modelIntersects.length > 0) {
+                                intersectionPoint = modelIntersects[0].point.clone();
+                            }
+                        }
+                        
+                        // If still no point, create one at a standard distance
+                        if (!intersectionPoint) {
+                            intersectionPoint = new THREE.Vector3();
+                            intersectionPoint.copy(ray.origin);
+                            intersectionPoint.addScaledVector(ray.direction, 10);
+                        }
+                    }
+                } 
+                // In perspective mode, check for model intersection first, then fall back to ray
+                else {
+                    // Try to find an intersection with the model first
+                    if (currentMesh) {
+                        const intersects = raycaster.intersectObject(currentMesh, true);
+                        if (intersects.length > 0) {
+                            intersectionPoint = intersects[0].point.clone();
+                        }
+                    }
+                    
+                    // If no intersection, create a point in 3D space at a reasonable distance
+                    if (!intersectionPoint) {
+                        const ray = raycaster.ray;
+                        intersectionPoint = new THREE.Vector3();
+                        intersectionPoint.copy(ray.origin);
+                        intersectionPoint.addScaledVector(ray.direction, 10); // Standard distance
+                    }
+                }
+                
+                // Add the measurement point
+                addMeasurementPoint(intersectionPoint);
+            }
         }
         
         function onPointerMove(event) {
@@ -802,7 +924,7 @@
                 
                 if (!intersectionPoint) {
                     if (currentMesh) {
-                        const modelIntersects = raycaster.intersectObject(currentMesh);
+                        const modelIntersects = raycaster.intersectObject(currentMesh, true);
                         if (modelIntersects.length > 0) {
                             intersectionPoint = modelIntersects[0].point.clone();
                         }
@@ -816,7 +938,7 @@
                 }
             } else {
                 if (currentMesh) {
-                    const intersects = raycaster.intersectObject(currentMesh);
+                    const intersects = raycaster.intersectObject(currentMesh, true);
                     if (intersects.length > 0) {
                         intersectionPoint = intersects[0].point.clone();
                     }
@@ -1089,11 +1211,29 @@
             const list = document.getElementById('measurementsList');
             list.innerHTML = '';
             
+            // Add regular measurements
             measurements.forEach((measurement, index) => {
                 const listItem = document.createElement('li');
                 listItem.textContent = `Measurement ${index + 1}: ${getMeasurementText(measurement.distance)}`;
                 list.appendChild(listItem);
             });
+            
+            // Add path measurement total if active
+            if (pathMeasurementPoints.length > 1) {
+                const listItem = document.createElement('li');
+                listItem.className = 'path-measurement';
+                listItem.textContent = `Path Total: ${getMeasurementText(pathTotalDistance)}`;
+                list.appendChild(listItem);
+                
+                // Add segment measurements
+                for (let i = 1; i < pathMeasurementPoints.length; i++) {
+                    const segmentDistance = pathMeasurementPoints[i-1].distanceTo(pathMeasurementPoints[i]);
+                    const segmentItem = document.createElement('li');
+                    segmentItem.className = 'path-segment';
+                    segmentItem.textContent = `Segment ${i}: ${getMeasurementText(segmentDistance)}`;
+                    list.appendChild(segmentItem);
+                }
+            }
         }
         
         function clearMeasurements() {
@@ -1107,6 +1247,13 @@
             measurements = [];
             measurementPoints = [];
             measurementLabels = [];
+            
+            // Clear path measurement arrays
+            pathMeasurementPoints = [];
+            pathMeasurementLines = [];
+            pathMeasurementLabels = [];
+            pathTotalDistance = 0;
+            pathTotalLabel = null;
             
             // Clear preview variables
             previewLine = null;
@@ -1157,6 +1304,11 @@
         }
         
         function toggleMeasureMode() {
+            // If path measure mode is active, turn it off
+            if (isPathMeasureMode) {
+                togglePathMeasureMode();
+            }
+
             isMeasureMode = !isMeasureMode;
             const measureButton = document.getElementById('measureMode');
             measureButton.classList.toggle('active', isMeasureMode);
@@ -1323,6 +1475,14 @@
             clearTimeout(loadingTimeout);
             document.getElementById('loading').style.display = 'none';
             
+            // Compute vertex normals if they don't exist
+            if (!geometry.hasAttribute('normal')) {
+                geometry.computeVertexNormals();
+            }
+            
+            // Ensure we have a bounding box
+            geometry.computeBoundingBox();
+            
             const material = new THREE.MeshPhongMaterial({ 
                 color: 0xdddddd, // Lighter color for the model
                 specular: 0x444444, // More moderate specular highlights
@@ -1334,6 +1494,7 @@
                 side: THREE.DoubleSide // Render both sides of faces
             });
             const mesh = new THREE.Mesh(geometry, material);
+            mesh.name = "MainModel"; // Name the mesh for debugging
             currentMesh = mesh;
             
             // Add edge highlighting for better visibility
@@ -1343,7 +1504,23 @@
                 linewidth: 1 
             });
             const wireframe = new THREE.LineSegments(edges, edgeMaterial);
+            wireframe.name = "ModelEdges"; // Name for debugging
             mesh.add(wireframe);
+            
+            // Make sure the mesh is set up for raycasting
+            mesh.geometry.computeBoundingSphere();
+            mesh.geometry.computeVertexNormals();
+            
+            // Only compute tangents if we have all required attributes
+            if (geometry.hasAttribute('position') && 
+                geometry.hasAttribute('normal') && 
+                geometry.hasAttribute('uv') && 
+                geometry.index !== null) {
+                mesh.geometry.computeTangents();
+            }
+            
+            mesh.matrixAutoUpdate = true;
+            mesh.updateMatrixWorld(true);
             
             // Center the model
             geometry.computeBoundingBox();
@@ -1446,7 +1623,7 @@
                 (boundingBox.max.z - boundingBox.min.z) * scaleFactor
             );
             const maxDim = Math.max(size.x, size.y, size.z);
-            const distance = maxDim * 0.5; // Reduced for extreme close-up view
+            const distance = maxDim * 0.5; // Reduced from 0.7 to 0.5 for extreme close-up
             
             // Camera position: standard position for Y-up world
             perspectiveCamera.position.set(distance, distance, distance);
@@ -1531,7 +1708,7 @@
         function updateOrthographicCamera() {
             // Adjust orthographic camera based on model size and current view
             const aspect = window.innerWidth / window.innerHeight;
-            const zoom = 0.5; // Reduced zoom for extreme close-up view
+            const zoom = 0.5; // Reduced zoom from 0.7 to 0.5 for extreme close-up
             const largestDim = Math.max(modelSize.x, modelSize.y, modelSize.z);
             
             orthographicCamera.left = -largestDim * zoom * aspect;
@@ -1550,7 +1727,7 @@
             // Front view shows object's left side (from -X)
             const extents = getModelExtents();
             const maxDim = Math.max(extents.z, extents.y);
-            const distance = maxDim * 0.6; // Reduced for extreme close-up view
+            const distance = maxDim * 0.6; // Reduced from 0.8 to 0.6 for extreme close-up
             
             const targetPosition = new THREE.Vector3(-distance, modelCenter.y, 0);
             const targetUp = new THREE.Vector3(0, 1, 0);
@@ -1562,7 +1739,7 @@
             // Back view shows object's right side (from +X)
             const extents = getModelExtents();
             const maxDim = Math.max(extents.z, extents.y);
-            const distance = maxDim * 0.6; // Reduced for extreme close-up view
+            const distance = maxDim * 0.6; // Reduced from 0.8 to 0.6 for extreme close-up
             
             const targetPosition = new THREE.Vector3(distance, modelCenter.y, 0);
             const targetUp = new THREE.Vector3(0, 1, 0);
@@ -1574,7 +1751,7 @@
             // Left view shows object's front (from +Z)
             const extents = getModelExtents();
             const maxDim = Math.max(extents.x, extents.y);
-            const distance = maxDim * 0.6; // Reduced for extreme close-up view
+            const distance = maxDim * 0.6; // Reduced from 0.8 to 0.6 for extreme close-up
             
             const targetPosition = new THREE.Vector3(0, modelCenter.y, distance);
             const targetUp = new THREE.Vector3(0, 1, 0);
@@ -1586,7 +1763,7 @@
             // Right view shows object's back (from -Z)
             const extents = getModelExtents();
             const maxDim = Math.max(extents.x, extents.y);
-            const distance = maxDim * 0.6; // Reduced for extreme close-up view
+            const distance = maxDim * 0.6; // Reduced from 0.8 to 0.6 for extreme close-up
             
             const targetPosition = new THREE.Vector3(0, modelCenter.y, -distance);
             const targetUp = new THREE.Vector3(0, 1, 0);
@@ -1598,7 +1775,7 @@
             // Top view looks at the model from +Y
             const extents = getModelExtents();
             const maxDim = Math.max(extents.x, extents.z);
-            const distance = maxDim * 0.6; // Reduced for extreme close-up view
+            const distance = maxDim * 0.6; // Reduced from 0.8 to 0.6 for extreme close-up
             
             const targetPosition = new THREE.Vector3(0, distance, 0);
             const targetUp = new THREE.Vector3(0, 0, -1);
@@ -1610,7 +1787,7 @@
             // Bottom view looks at the model from -Y
             const extents = getModelExtents();
             const maxDim = Math.max(extents.x, extents.z);
-            const distance = maxDim * 0.6; // Reduced for extreme close-up view
+            const distance = maxDim * 0.6; // Reduced from 0.8 to 0.6 for extreme close-up
             
             const targetPosition = new THREE.Vector3(0, -distance, 0);
             const targetUp = new THREE.Vector3(0, 0, 1);
@@ -1675,6 +1852,324 @@
         document.getElementById('viewTop').addEventListener('click', setViewTop);
         document.getElementById('viewBottom').addEventListener('click', setViewBottom);
         document.getElementById('toggleCameraMode').addEventListener('click', toggleCameraMode);
+
+        // Mobile-specific event handlers
+        if (isMobile) {
+            document.getElementById('mobileMeasure').addEventListener('click', toggleMeasureMode);
+            document.getElementById('mobilePathMeasure').addEventListener('click', togglePathMeasureMode);
+            
+            // Use the floating action button as the primary measure button on mobile
+            const mobileMeasureBtn = document.getElementById('mobileMeasure');
+            mobileMeasureBtn.style.display = 'flex';
+            
+            // Show the path measure button on mobile
+            const mobilePathMeasureBtn = document.getElementById('mobilePathMeasure');
+            mobilePathMeasureBtn.style.display = 'flex';
+            
+            // Add a double-tap functionality to the measure FAB for clearing measurements
+            let lastTapTime = 0;
+            mobileMeasureBtn.addEventListener('click', function(e) {
+                const currentTime = new Date().getTime();
+                const tapLength = currentTime - lastTapTime;
+                
+                if (tapLength < 500 && tapLength > 0) {
+                    // Double tap detected - clear measurements
+                    clearMeasurements();
+                    e.preventDefault();
+                }
+                
+                lastTapTime = currentTime;
+            });
+            
+            // Add the same double-tap functionality to the path measure FAB
+            let lastPathTapTime = 0;
+            mobilePathMeasureBtn.addEventListener('click', function(e) {
+                const currentTime = new Date().getTime();
+                const tapLength = currentTime - lastPathTapTime;
+                
+                if (tapLength < 500 && tapLength > 0) {
+                    // Double tap detected - clear path measurements
+                    clearMeasurements();
+                    e.preventDefault();
+                }
+                
+                lastPathTapTime = currentTime;
+            });
+            
+            // Show active state on the FAB when in measure mode
+            if (isMeasureMode) {
+                mobileMeasureBtn.classList.add('measure-mobile-active');
+            }
+            
+            // Show active state on the path FAB when in path measure mode
+            if (isPathMeasureMode) {
+                mobilePathMeasureBtn.classList.add('path-measure-mobile-active');
+            }
+            
+            // Add tap to show/hide annotations on mobile
+            document.addEventListener('click', function(e) {
+                // If we're in measure mode, keep annotations visible
+                if (isMeasureMode) {
+                    document.getElementById('annotations').style.display = 'block';
+                } else {
+                    // Toggle annotations based on tap position - if not tapping a control
+                    if (!e.target.closest('.controls-overlay') && 
+                        !e.target.closest('#annotations') && 
+                        !e.target.closest('.mobile-fab')) {
+                        const annotations = document.getElementById('annotations');
+                        annotations.style.display = annotations.style.display === 'none' ? 'block' : 'none';
+                    }
+                }
+            });
+        }
+
+        // Path measurement functions
+        function togglePathMeasureMode() {
+            // If regular measure mode is active, turn it off
+            if (isMeasureMode) {
+                toggleMeasureMode();
+            }
+
+            isPathMeasureMode = !isPathMeasureMode;
+            const pathMeasureButton = document.getElementById('pathMeasureMode');
+            pathMeasureButton.classList.toggle('active', isPathMeasureMode);
+            
+            // Update mobile floating action button if on mobile
+            if (isMobile) {
+                document.getElementById('mobilePathMeasure').classList.toggle('path-measure-mobile-active', isPathMeasureMode);
+                document.body.classList.toggle('path-measure-mobile-active', isPathMeasureMode);
+                // Always show annotations in path measure mode on mobile
+                document.getElementById('annotations').style.display = isPathMeasureMode ? 'block' : 'none';
+            }
+            
+            if (isPathMeasureMode) {
+                controls.enableRotate = true; // Allow rotation in path measure mode
+                pathMeasureButton.textContent = `Exit Path Measure`;
+                
+                // Create a small notification to instruct the user
+                const notification = document.createElement('div');
+                notification.style.position = 'fixed';
+                notification.style.top = '50%';
+                notification.style.left = '50%';
+                notification.style.transform = 'translate(-50%, -50%)';
+                notification.style.backgroundColor = 'rgba(0, 0, 0, 0.7)';
+                notification.style.color = 'white';
+                notification.style.padding = '10px 15px';
+                notification.style.borderRadius = '5px';
+                notification.style.zIndex = '1000';
+                notification.style.fontFamily = 'Arial, sans-serif';
+                notification.style.fontSize = '16px';
+                notification.textContent = isMobile ? 
+                    'Path Measure: Tap to add points, rotate to view, double-tap to clear' : 
+                    'Path Measure Mode: Click to place points. Hold Space to rotate without adding points.';
+                document.body.appendChild(notification);
+                
+                // Remove the notification after 3 seconds
+                setTimeout(() => {
+                    if (notification.parentNode) {
+                        document.body.removeChild(notification);
+                    }
+                }, 3000);
+            } else {
+                pathMeasureButton.textContent = 'Path Measure';
+                
+                // Clean up any in-progress path measurements
+                cancelPathMeasurement();
+            }
+        }
+
+        function addPathMeasurementPoint(point) {
+            if (!isPathMeasureMode) return;
+            
+            // Add a marker at the clicked point
+            const markerGroup = new THREE.Group();
+            markerGroup.position.copy(point);
+            
+            // Create a more visible marker
+            // Create a small sphere as a marker - using smaller size
+            const sphereGeometry = new THREE.SphereGeometry(0.03);  // Reduced from 0.05
+            const sphereMaterial = new THREE.MeshBasicMaterial({ 
+                color: 0xFF6600, 
+                transparent: true,
+                opacity: 0.8
+            });
+            const sphere = new THREE.Mesh(sphereGeometry, sphereMaterial);
+            markerGroup.add(sphere);
+            
+            // Add a wireframe sphere for better visibility from any angle - also smaller
+            const wireframeGeometry = new THREE.SphereGeometry(0.035); // Reduced from 0.06
+            const wireframeMaterial = new THREE.MeshBasicMaterial({
+                color: 0x000000,
+                wireframe: true,
+                transparent: true,
+                opacity: 0.5
+            });
+            const wireframeSphere = new THREE.Mesh(wireframeGeometry, wireframeMaterial);
+            markerGroup.add(wireframeSphere);
+            
+            // Add a number label to the point
+            const labelDiv = document.createElement('div');
+            labelDiv.className = 'path-point-indicator';
+            labelDiv.textContent = pathMeasurementPoints.length + 1;
+            const label = new CSS2DObject(labelDiv);
+            label.position.set(0, 0.15, 0); // Position slightly above the point
+            markerGroup.add(label);
+            
+            measurementGroup.add(markerGroup);
+            pathMeasurementLabels.push(label);
+            
+            // Add the point to our array
+            pathMeasurementPoints.push(point);
+            
+            // If this is not the first point, create a line to the previous point
+            if (pathMeasurementPoints.length > 1) {
+                const prevPoint = pathMeasurementPoints[pathMeasurementPoints.length - 2];
+                const currentPoint = point;
+                
+                // Create a line between the points
+                const lineMaterial = new THREE.LineBasicMaterial({ 
+                    color: 0xFF6600, 
+                    linewidth: 3 
+                });
+                const geometry = new THREE.BufferGeometry().setFromPoints([prevPoint, currentPoint]);
+                const line = new THREE.Line(geometry, lineMaterial);
+                measurementGroup.add(line);
+                pathMeasurementLines.push(line);
+                
+                // Create a slightly thicker line for better visibility
+                const thickLineMaterial = new THREE.LineBasicMaterial({ 
+                    color: 0x000000, 
+                    linewidth: 5,
+                    transparent: true,
+                    opacity: 0.3
+                });
+                const thickGeometry = new THREE.BufferGeometry().setFromPoints([prevPoint, currentPoint]);
+                const thickLine = new THREE.Line(thickGeometry, thickLineMaterial);
+                measurementGroup.add(thickLine);
+                pathMeasurementLines.push(thickLine);
+                
+                // Calculate the distance between these two points
+                const segmentDistance = prevPoint.distanceTo(currentPoint);
+                pathTotalDistance += segmentDistance;
+                
+                // Create or update the total distance label
+                updatePathTotalLabel();
+                
+                // Update the measurements list
+                updateMeasurementsList();
+            }
+        }
+
+        function updatePathTotalLabel() {
+            // Remove existing total label if it exists
+            if (pathTotalLabel) {
+                measurementGroup.remove(pathTotalLabel);
+            }
+            
+            // Only create a label if we have at least one line
+            if (pathMeasurementPoints.length > 1) {
+                // Create a label at the last point
+                const lastPoint = pathMeasurementPoints[pathMeasurementPoints.length - 1];
+                
+                const labelDiv = document.createElement('div');
+                labelDiv.className = 'path-total-label';
+                labelDiv.textContent = `Total: ${getMeasurementText(pathTotalDistance)}`;
+                pathTotalLabel = new CSS2DObject(labelDiv);
+                
+                // Position the label above the last point
+                pathTotalLabel.position.copy(lastPoint);
+                pathTotalLabel.position.y += 0.25; // Place it slightly above the point
+                
+                measurementGroup.add(pathTotalLabel);
+            }
+        }
+
+        function cancelPathMeasurement() {
+            // Clean up any path measurement visuals
+            for (let i = measurementGroup.children.length - 1; i >= 0; i--) {
+                const child = measurementGroup.children[i];
+                
+                // Check if this object is part of our path measurement
+                let isPathObject = false;
+                
+                // Check if the object is a pathMeasurementLine
+                for (let j = 0; j < pathMeasurementLines.length; j++) {
+                    if (child === pathMeasurementLines[j]) {
+                        isPathObject = true;
+                        break;
+                    }
+                }
+                
+                // Check if the object contains a pathMeasurementLabel
+                if (!isPathObject) {
+                    for (let j = 0; j < pathMeasurementLabels.length; j++) {
+                        if (child.children && child.children.includes(pathMeasurementLabels[j])) {
+                            isPathObject = true;
+                            break;
+                        }
+                    }
+                }
+                
+                // Check if it's the total label
+                if (!isPathObject && child === pathTotalLabel) {
+                    isPathObject = true;
+                }
+                
+                // Remove path measurement objects
+                if (isPathObject) {
+                    measurementGroup.remove(child);
+                }
+            }
+
+            // Clear arrays
+            pathMeasurementPoints = [];
+            pathMeasurementLines = [];
+            pathMeasurementLabels = [];
+            
+            // Remove the total label
+            if (pathTotalLabel) {
+                measurementGroup.remove(pathTotalLabel);
+                pathTotalLabel = null;
+            }
+            
+            // Reset total distance
+            pathTotalDistance = 0;
+            
+            // Update the measurements list
+            updateMeasurementsList();
+        }
+
+        // Debug function to visualize the ray being cast
+        function visualizeRay(ray) {
+            // Remove existing visualization
+            if (rayVisualization) {
+                scene.remove(rayVisualization);
+                rayVisualization = null;
+            }
+            
+            // Create line from ray origin extending in ray direction
+            const rayLength = 1000;
+            const endPoint = new THREE.Vector3().copy(ray.origin).addScaledVector(ray.direction, rayLength);
+            const geometry = new THREE.BufferGeometry().setFromPoints([ray.origin, endPoint]);
+            
+            const material = new THREE.LineBasicMaterial({ 
+                color: 0xff00ff, 
+                linewidth: 2,
+                transparent: true,
+                opacity: 0.6
+            });
+            
+            rayVisualization = new THREE.Line(geometry, material);
+            scene.add(rayVisualization);
+            
+            // Auto-remove after a short delay
+            setTimeout(() => {
+                if (rayVisualization) {
+                    scene.remove(rayVisualization);
+                    rayVisualization = null;
+                }
+            }, 1000);
+        }
     </script>
 </body>
 </html>

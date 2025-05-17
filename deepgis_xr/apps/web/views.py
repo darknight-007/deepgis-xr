@@ -108,6 +108,9 @@ def stl_viewer(request):
 def label_3d(request):
     return render(request, 'web/label_3d.html')
 
+def label_3d_dev(request):
+    return render(request, 'web/label_3d_dev.html')
+
 def map_label(request):
     return render(request, 'web/map_label.html')
 
