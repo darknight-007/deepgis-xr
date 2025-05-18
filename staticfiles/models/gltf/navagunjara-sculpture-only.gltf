@@ -1,0 +1,128 @@
+{
+    "asset": {
+        "version": "2.0",
+        "generator": "Open Asset Import Library (assimp v5.2.0)"
+    },
+    "extensionsUsed": [
+        "KHR_materials_pbrSpecularGlossiness",
+        "FB_ngon_encoding"
+    ],
+    "accessors": [
+        {
+            "bufferView": 0,
+            "byteOffset": 0,
+            "componentType": 5126,
+            "count": 1568425,
+            "type": "VEC3",
+            "max": [
+                3.6972951889038088,
+                2.808417797088623,
+                4.308750152587891
+            ],
+            "min": [
+                0.014709427952766419,
+                1.737607479095459,
+                -0.02356743812561035
+            ]
+        },
+        {
+            "bufferView": 1,
+            "byteOffset": 0,
+            "componentType": 5126,
+            "count": 1568425,
+            "type": "VEC3",
+            "max": [
+                0.9999996423721314,
+                1.0,
+                1.0
+            ],
+            "min": [
+                -0.9999986290931702,
+                -1.0,
+                -1.0
+            ]
+        },
+        {
+            "bufferView": 2,
+            "byteOffset": 0,
+            "componentType": 5125,
+            "count": 1728447,
+            "type": "SCALAR",
+            "max": [
+                1568424
+            ],
+            "min": [
+                0
+            ]
+        }
+    ],
+    "buffers": [
+        {
+            "byteLength": 44555988,
+            "uri": "navagunjara-sculpture-only.bin"
+        }
+    ],
+    "bufferViews": [
+        {
+            "buffer": 0,
+            "byteOffset": 0,
+            "byteLength": 18821100,
+            "target": 34962
+        },
+        {
+            "buffer": 0,
+            "byteOffset": 18821100,
+            "byteLength": 18821100,
+            "target": 34962
+        },
+        {
+            "buffer": 0,
+            "byteOffset": 37642200,
+            "byteLength": 6913788,
+            "target": 34963
+        }
+    ],
+    "materials": [
+        {
+            "name": "DefaultMaterial",
+            "pbrMetallicRoughness": {
+                "metallicFactor": 0.0
+            }
+        }
+    ],
+    "meshes": [
+        {
+            "primitives": [
+                {
+                    "mode": 4,
+                    "material": 0,
+                    "indices": 2,
+                    "attributes": {
+                        "POSITION": 0,
+                        "NORMAL": 1
+                    }
+                }
+            ]
+        }
+    ],
+    "nodes": [
+        {
+            "name": "<STL_BINARY>",
+            "children": [
+                1
+            ]
+        },
+        {
+            "name": "node",
+            "mesh": 0
+        }
+    ],
+    "scenes": [
+        {
+            "nodes": [
+                0
+            ]
+        }
+    ],
+    "scene": 0
+}
